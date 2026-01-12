@@ -1,2 +1,5 @@
 # OTUS-home-work
-home work OTUS
+ФИО: Тарасов Федор Владимирович
+Группа: OTUS Postgre-Advanced-2025-12
+
+HW01 - домашняя работа №1 "Уровни изоляции"
