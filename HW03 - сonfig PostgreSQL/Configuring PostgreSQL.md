@@ -47,7 +47,7 @@ INSERT 0 20
 # 3. Добавьте внешний диск к виртуальной машине и перенесите туда базу данных:
 
 ### 3.1 Подключил диск tarasov-otus-disk:
-![КАРТИНКА1](OTUS-home-work/project/lab_3/1.jpg)
+![КАРТИНКА1](/OTUS-home-work/project/lab_3/1.jpg)
 
 ```
 fvtarasov@tarasov-postgre-advance:~$ sudo lsblk -o NAME,FSTYPE,SIZE,MOUNTPOINT,LABEL
