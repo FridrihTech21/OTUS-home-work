@@ -60,10 +60,10 @@ vdb              20G
 ```
 
 ### 3.2 Создал раздел:
-![КАРТИНКА2](project/lab_3/2.jpg)
+![КАРТИНКА2](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_3/2.jpg)
 
 ### 3.3 Отформатировал диск и смонтировал раздел:
-![КАРТИНКА3](project/lab_3/3.jpg)
+![КАРТИНКА3](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_3/3.jpg)
 
 ### 3.4 Создал каталог tmptblspc для tablespace:
 ```
@@ -106,4 +106,4 @@ CREATE DATABASE
 
 
 ### 4. Проверка целеостности данных - данные сохранились и доступны:
-![КАРТИНКА4](project/lab_3/3.jpg)
+![КАРТИНКА4](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_3/4.jpg)
