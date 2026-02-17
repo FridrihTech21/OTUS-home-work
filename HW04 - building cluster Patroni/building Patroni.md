@@ -229,7 +229,7 @@ sudo systemctl enable etcd
 
 После чего запускаем службу: `sudo systemctl start etcd`
 
-### Шаг 6. Проверка работы кластера etcd
+### 2.1.6 Шаг 6. Проверка работы кластера etcd
 
 Проверяем статус кластера etcd:
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/4.jpg)
@@ -250,3 +250,308 @@ sudo systemctl restart etcd
 
 ## 2.2 Установка PostgreSQL 17
 
+Воспользуемся:
+```
+sudo apt install -y postgresql-common
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+sudo apt install -y postgresql-17
+```
+`postgresql-common` — обязательный пакет для работы с PostgreSQL в системах на базе Debian/Ubuntu.
+`apt.postgresql.org.sh` — скрипт, который добавляет официальный репозиторий PostgreSQL, чтобы установить актуальную версию СУБД.
+
+В итоге имеем три PostgreSQL:
+```
+fvtarasov@tarasov-postgre-advance-1:~/.tls$ sudo su - postgres
+postgres@tarasov-postgre-advance-1:~$ psql --version
+psql (PostgreSQL) 17.8 (Ubuntu 17.8-1.pgdg24.04+1)
+---
+fvtarasov@tarasov-postgre-advance-2:~/.tls$ sudo su - postgres
+postgres@tarasov-postgre-advance-2:~$ psql --version
+psql (PostgreSQL) 17.8 (Ubuntu 17.8-1.pgdg24.04+1)
+---
+fvtarasov@tarasov-postgre-advance-3:~/.tls$ sudo su - postgres
+postgres@tarasov-postgre-advance-3:~$ psql --version
+psql (PostgreSQL) 17.8 (Ubuntu 17.8-1.pgdg24.04+1)
+```
+
+Добавляем записи в pg_hba.conf:
+```
+host all all 0.0.0.0/0 scram-sha-256
+host replication replicator 0.0.0.0/0 scram-sha-256
+```
+
+Создаем каталог для TLS Patroni, и перемещаем в них необходимые сертификаты, которые ранее при помощи скрипта собирали:
+```
+mkdir -p /opt/patroni/.tls
+
+sudo cp /etc/default/etcd/.tls/ca.crt /etc/default/etcd/.tls/ca.key /etc/default/etcd/.tls/etcd1.crt /etc/default/etcd/.tls/etcd2.crt /etc/default/etcd/.tls/etcd3.crt /etc/default/etcd/.tls/node1.crt /etc/default/etcd/.tls/node2.crt /etc/default/etcd/.tls/node3.crt /etc/default/etcd/.tls/node3.key /opt/patroni/.tls
+
+sudo cp /etc/default/etcd/.tls/ca.crt /etc/default/etcd/.tls/ca.key /etc/default/etcd/.tls/etcd1.crt /etc/default/etcd/.tls/etcd2.crt /etc/default/etcd/.tls/etcd3.crt /etc/default/etcd/.tls/node1.crt /etc/default/etcd/.tls/node2.crt /etc/default/etcd/.tls/node2.key /etc/default/etcd/.tls/node3.crt /opt/patroni/.tls
+...
+
+chmod -R 744 /opt/patroni/.tls
+chmod 600 /opt/patroni/.tls/*.key
+```
+
+## 2.3 Установка и настройка Patroni
+
+Patroni будет крутиться в изолированной среде Python для того, чтобы не нарушать систему, контролировать зависимости. Установка происходит из локальных репозиториев, все организовано в директории `/opt/patroni`.
+
+### 2.3.1 Шаг 1. Установка Python
+
+Устанваливаем Python на машинах:
+```
+sudo apt update
+sudo apt install build-essential libssl-dev libffi-dev bzip2
+
+wget https://www.python.org/ftp/python/3.12.4/Python-3.12.4.tar.xz
+tar -xf Python-3.12.4.tar.xz
+cd Python-3.12.4/
+./configure --enable-optimizations
+make altinstall
+sudo ln -sf /usr/local/bin/python3.12 /usr/bin/python3
+sudo ln -sf /usr/local/bin/pip3.12 /usr/bin/pip3
+```
+Таким образом при установке Patroni можно вычеркнуть риск повреждения системы. Плюс получим удобный каталог с бин-файлами. 
+
+### 2.3.2 Шаг 2. Создаем виртуальную среду 
+Выполняем команды:
+```
+sudo su - postgres
+mkdir -p /opt/patroni
+python3.12 -m venv /opt/patroni --without-pip
+source /opt/patroni/bin/activate
+curl https://bootstrap.pypa.io/get-pip.py -o /opt/patroni/bin/get-pip.py
+python /opt/patroni/bin/get-pip.py
+mkdir –p /opt/patroni/packages
+mkdir /data/log/patroni
+chown -R postgres:postgres /data/log/patroni
+sudo mkdir -p /home/postgres/
+sudo chown -R postgres:postgres /home/postgres/
+```
+
+### 2.3.3 Шаг 3. Установка пакетов Patroni
+
+Примерный список пакетов для скачивания, которые нужно положить в `/opt/patroni/packages`:
+```
+click-8.1.7-py3-none-any.whl
+dnspython-2.6.1-py3-none-any.whl
+patroni-3.3.2-py3-none-any.whl
+prettytable-3.10.2-py3-none-any.whl
+psutil-6.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+python-etcd-0.4.5.tar.gz
+PyYAML-6.0.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+setuptools-72.1.0-py3-none-any.whl
+six-1.16.0-py2.py3-none-any.whl
+urllib3-2.2.2-py3-none-any.whl
+wcwidth-0.2.13-py2.py3-none-any.whl
+ydiff-1.3.tar.gz
+psycopg2_binary-2.9.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+```
+
+### 2.3.4 Шаг 4. Установка Patroni при помощи скачанных пакетов
+
+Далее устанавливаем Patroni без доступа к интернету, используя заранее скачанные пакеты, и устанавливаем драйвер для подключения:
+```
+pip3 install --no-index --find-links=/opt/patroni/packages patroni[etcd3]
+pip3 install --no-index --find-links=/opt/patroni/packages psycopg2-binary
+chown -R postgres:postgres /opt/patroni
+```
+
+Теперь нужно добавить в профайл PgSQL параметры:
+```
+export PG_CONFIG=/usr/lib/postgresql/17/bin/pg_config
+export PATRONI_CONFIG_FILE=/etc/patroni/config.yml
+```
+
+Активируем виртуальную среду: `source /opt/patroni/bin/activate`
+Создаем конфиг-файл Patroni для каждой ноды:`vi /etc/patroni/config.yml`
+
+<details>
+<summary>Содержимое Service-Unit для Patroni</summary>
+
+```bash
+patroni
+scope: patroni_cluster
+namespace: /patroni
+name: patroni_node3 # Изменить на 2 ноде
+log:
+  level: INFO
+  dir: /data/log/patroni
+  file_size: 50000000
+  file_num: 10
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: node3:8008 # Изменить на ноде
+  verify_client: optional
+  cafile: /opt/patroni/.tls/ca.crt
+  certfile: /opt/patroni/.tls/node3.crt # Не забыть изменить сертификаты на ноде
+  keyfile: /opt/patroni/.tls/node3.key
+ctl:
+  cacert: /opt/patroni/.tls/ca.crt # Не забыть изменить сертификаты на 2 ноде
+  certfile: /opt/patroni/.tls/node3.crt
+  keyfile: /opt/patroni/.tls/node3.key
+etcd3:
+  hosts: ["etcd1:2379", "etcd2:2379", "etcd3:2379"]
+  protocol: https
+  cacert: /opt/patroni/.tls/ca.crt
+  cert: /opt/patroni/.tls/node3.crt # Не забыть изменить сертификаты на 2 ноде
+  key: /opt/patroni/.tls/node3.key
+watchdog:
+  mode: off # Если настроен, можно включить
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        shared_buffers: '512MB'
+        wal_level: 'replica'
+        wal_keep_size: '512MB'
+        max_connections: 100
+        effective_cache_size: '1GB'
+        maintenance_work_mem: '256MB'
+        max_wal_senders: 5
+        max_replication_slots: 5
+        checkpoint_completion_target: 0.7
+        log_connections: 'on'
+        log_disconnections: 'on'
+        log_statement: 'ddl'
+        log_line_prefix: '%m [%p] %q%u@%d '
+        logging_collector: 'on'
+        log_destination: 'stderr'
+        log_directory: '/data/log'
+        log_filename: 'postgresql-%Y-%m-%d.log'
+        log_rotation_size: '100MB'
+        log_rotation_age: '1d'
+        log_min_duration_statement: -1
+        log_min_error_statement: 'error'
+        log_min_messages: 'warning'
+        log_error_verbosity: 'verbose'
+        log_hostname: 'off'
+        log_duration: 'off'
+        log_timezone: 'Europe/Moscow'
+        timezone: 'Europe/Moscow'
+        lc_messages: 'C.UTF-8'
+        password_encryption: 'scram-sha-256'
+        debug_print_parse: 'off'
+        debug_print_rewritten: 'off'
+        debug_print_plan: 'off'
+        superuser_reserved_connections: 3
+        synchronous_commit: 'on'
+        synchronous_standby_names: '*'
+        hot_standby: 'on'
+        compute_query_id: 'on'
+      pg_hba:
+        - local all all peer
+        - host all all 127.0.0.1/32 scram-sha-256
+        - host all all 0.0.0.0/0 md5
+        - host replication replicator 127.0.0.1/32 scram-sha-256
+        - host replication replicator 10.92.36.103/24 scram-sha-256   # не забыть заменить на ноде
+  pg_hba:
+    - local all all peer
+    - host all all 127.0.0.1/32 scram-sha-256
+    - host all all 0.0.0.0/0 md5
+    - host replication replicator 127.0.0.1/32 scram-sha-256
+    - host replication replicator 10.92.36.103/24 scram-sha-256   # не забыть заменить на ноде
+  initdb: ["encoding=UTF8", "data-checksums", "username=postgres", "auth=scram-sha-256"]
+  users:
+    admin:
+      password: 'new_secure_password1'
+      options: ["createdb"]
+postgresql:
+  listen: 0.0.0.0
+  connect_address: 10.92.36.103:5432 # не забываем заменить адрес на ноде.
+  use_unix_socket: true
+  data_dir: /data/17
+  config_dir: /data/17
+  bin_dir: /usr/bin
+  pgpass: /home/postgres/.pgpass_patroni
+  authentication:
+    replication:
+      username: replicator
+      password: 'new_repl_password'
+    superuser:
+      username: postgres
+      password: 'new_superuser_password'
+    rewind:
+      username: postgres
+      password: 'new_superuser_password'
+  parameters:
+    unix_socket_directories: "/var/run/postgresql"
+  create_replica_methods: ["basebackup"]
+  basebackup:
+    max-rate: 100M
+    checkpoint: fast
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+  
+  create user replicator replication login encrypted password 'new_repl_password';
+```
+</details>
+
+Для пущего спокойствия проверяем конфиг-файл:
+```
+patroni --validate-config /etc/patroni/config.yml
+```
+Если ничего не выводит, то все ок и идем дальше.
+
+Выделим Service-Unit для Patroni на каждом хосте: `sudo vi /etc/systemd/system/patroni.service`
+<details>
+<summary>Содержимое Service-Unit для Patroni</summary>
+
+```bash
+service patroni
+[Unit]
+Description=Patroni high-availability PostgreSQL
+After=network.target
+ 
+[Service]
+User=postgres
+Type=simple
+ExecStart=/opt/patroni/bin/patroni /etc/patroni/config.yml
+Restart=always
+RestartSec=5
+LimitNOFILE=1024
+ 
+[Install]
+WantedBy=multi-user.target
+```
+</details>
+
+
+Далее нужно перезапустить Systemd и запустить Patroni:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable patroni
+sudo systemctl start patroni
+```
+
+Как видно на картинке Patroni запустился:
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/6.jpg)
+
+В заверешнии установки и настройки Patroni, нужно его ноды синхронизировать, для этого выполним:
+1) Останавливаем Patroni: `sudo systemctl stop patroni`
+2) Теперь благополучно удаляем содержимое директории PGDATA: `sudo rm -rf /data/17/*`
+3) Запускаем Patroni: `sudo systemctl start patroni`
+
+И наслаждаемся синхронностью нод:
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/7.jpg)
+
+Что видно? То что node2 и node3 являются репликами node1, соответсвенно на нее подписаны, и что видно на скриншоте выше. 
