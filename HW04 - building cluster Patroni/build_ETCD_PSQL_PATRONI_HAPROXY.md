@@ -268,7 +268,7 @@ sudo systemctl start patroni
 
 Теперь к самому интересному: `failover`. Просто перезапустим нынешнего лидера, после чего помотрим кто будет назначен лидером из 2-х реплик:
 
-Со криншота видно, что лидером является `patroni_node1`:
+Со скриншота видно, что лидером является `patroni_node1`:
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/12.jpg)
 
 После рестарта службы на `patroni_node1` лидером становиться `patroni_node2`:
