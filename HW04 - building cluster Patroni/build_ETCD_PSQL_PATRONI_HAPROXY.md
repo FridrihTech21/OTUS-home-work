@@ -317,18 +317,18 @@ listen production
    option httpchk GET/master
    http-check expect status 200
    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-   server tarasov-postgre-advance-etcd-1 10.92.36.93:5432 maxconn 100 check port 8008
-   server tarasov-postgre-advance-etcd-2 10.92.36.99:5432 maxconn 100 check port 8008
-   server tarasov-postgre-advance-etcd-3 10.92.36.12:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-1 10.92.36.93:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-2 10.92.36.99:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-3 10.92.36.12:5432 maxconn 100 check port 8008
 
 listen standby
    bind *:5001
    option httpchk GET/replica
    http-check expect status 200
    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-   server tarasov-postgre-advance-etcd-1 10.92.36.93:5432 maxconn 100 check port 8008
-   server tarasov-postgre-advance-etcd-2 10.92.36.99:5432 maxconn 100 check port 8008
-   server tarasov-postgre-advance-etcd-3 10.92.36.12:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-1 10.92.36.93:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-2 10.92.36.99:5432 maxconn 100 check port 8008
+   server tarasov-postgre-advance-3 10.92.36.12:5432 maxconn 100 check port 8008
 ```
 </details>
 
