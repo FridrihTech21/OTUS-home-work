@@ -336,3 +336,9 @@ listen standby
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/15.jpg)
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/16.jpg)
 
+Теперь попробуем подсоеденится к БД для чтения и записи. 
+На скриншоте видно, что подключение по 5000 приведет на на мастер Patroni, а подключение по 5001 порту приведет нас к одной из реплик.
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/17.jpg)
+
+### 4. Проверьте отказоустойчивость кластера, имитируя сбой на одном из узлов.
+
