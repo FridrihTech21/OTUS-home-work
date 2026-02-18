@@ -15,12 +15,13 @@ Patroni выступает инструментом для управления 
 
 Сетевая структура следующая:
 ```
-etcd1: 10.92.36.48
-etcd2: 10.92.36.31
+etcd1: 10.92.36.60
+etcd2: 10.92.36.131
 etcd3: 10.92.36.28
-node1: 10.92.36.82
-node2: 10.92.36.60
-node3: 10.92.36.103
+node1: 10.92.36.93
+node2: 10.92.36.99
+node3: 10.92.36.12
+ha-proxy: 10.92.36.120
 ```
 
 ## 2.1 Установка и настройка etcd
@@ -555,3 +556,71 @@ sudo systemctl start patroni
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/7.jpg)
 
 Что видно? То что node2 и node3 являются репликами node1, соответсвенно на нее подписаны, и что видно на скриншоте выше. 
+
+И в заверешнии установки Patroni создадим `alias`, для более удобного просмотрета состояния кластера:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/8.jpg)
+
+### 2.3.5 Автоматический failover
+
+Для демонстрации автоназначения лидера, т.е. failover будем использовать: `systemctl stop patroni`
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_4/9.jpg)
+На картинке видно, что имеются 3 ноды: patroni_node1(Leader), patroni_node2(Replica), patroni_node3(Sync Standby).
+Лидер принимает подключение для добавления/изменения данных в БД. Стендюай приоритетный кандидат на позицию лидера, в момент занимаемой роли, стендбай принимает подключения только на чтение. И реплика просто принимает подключения на чтение из БД.
+После остановки лидера, стендбай принимает роль лидера на себя. А реплика теперь является стендбаем. Запуск patroni_node1 инициализирует его как реплику. 
+Итого: patroni_node1(Replica), patroni_node2(Sync Standby), patroni_node3(Leader).
+
+# 3. Настройте HAProxy для балансировки нагрузки.
+
+Устанвилваем HAProxy на отдельную машину:
+```
+sudo apt-get install haproxy
+```
+
+После установке HAProxy, требуется изменить его основной конфигурационный файл:
+<details>
+<summary>Содержимое Service-Unit для Patroni</summary>
+
+```bash
+global
+   maxconn 100
+   log 127.0.0.1 local2
+
+defaults
+   log global
+   mode tcp
+   retries 2
+   timeout client 30m
+   timeout connect 4s
+   timeout server 30m
+   timeout check 5s
+
+listen stats
+   mode http
+   bind *:7000
+   stats enable
+   stats uri /
+
+listen production
+   bind *:5432
+   option httpchk GET/master
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server node1 node1:5432 maxconn 100 check port 8008
+   server node2 node2:5432 maxconn 100 check port 8008
+   server node3 node3:5432 maxconn 100 check port 8008
+
+listen standby
+   bind *:5433
+   option httpchk GET/replica
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server node1 node1:5432 maxconn 100 check port 8008
+   server node2 node2:5432 maxconn 100 check port 8008
+   server node3 node3:5432 maxconn 100 check port 8008
+
+```
+</details>
+
+listen production - собирает статус для лидера Patroni
+listen standby - собирает статус реплик Patroni
