@@ -342,3 +342,94 @@ listen standby
 
 ### 4. Проверьте отказоустойчивость кластера, имитируя сбой на одном из узлов.
 
+Имитриуем сбой кластера путем остановки сервиса `Patroni` на лидере кластера. 
+Ождаемое поведение:
+1) При выходе из строя лидера одна из реплик, являбщаяся `stanby` становиться новым лидером;
+2) Кластер продалжает функционировать, значит должен принимать запросы на запись и чтение;
+3) Проверка `HAProxy`. Запросы перенаправляются на новый лидер;
+4) Проверка `HAProxy`. Запросы на чтение перенаправляются едиснтвенной оставшейся реплике;
+5) После восстановления бывший лидер становится репликой, нынешняя реплика должны быть `Sync Stanby`.
+
+Исходные данные:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/18.jpg)
+`patroni_node1` является лидером кластера.
+`patroni_node2` является репликой кластера.
+`patroni_node3` является стэндбаем, соотвественно данная нода должна взять на себя роль лидера, если `patroni_node1` откажет.
+
+Статистика HAProxy на момент нормальной работы кластера, на ней видно перечисленные ноды Patroni, какие роли занимают.
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/19.jpg)
+
+## 4.1 Остановка лидера Patroni
+
+Останавливаем лидер Patroni `sudo systemctl stop patroni`:
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/20.jpg)
+
+После просмотра статуса кластера видно, что `patroni_node2` не запустилась как реплика. 
+Откроем логи: ` tail -n 50 /data/log/postgresql-2026-02-19_06.log`
+<details>
+<summary>postgresql-2026-02-19_06.log</summary>
+  
+```bash
+2026-02-19 06:34:41 UTC [4604]: [3-1] user=,db=,app=,client= LOG:  starting PostgreSQL 16.11 (Ubuntu 16.11-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, 64-bit
+2026-02-19 06:34:41 UTC [4604]: [4-1] user=,db=,app=,client= LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2026-02-19 06:34:41 UTC [4604]: [5-1] user=,db=,app=,client= LOG:  listening on IPv4 address "10.92.36.99", port 5432
+2026-02-19 06:34:41 UTC [4604]: [6-1] user=,db=,app=,client= LOG:  listening on Unix socket "./.s.PGSQL.5432"
+2026-02-19 06:34:41 UTC [4609]: [1-1] user=,db=,app=,client= LOG:  database system was shut down in recovery at 2026-02-19 06:28:27 UTC
+2026-02-19 06:34:41 UTC [4609]: [2-1] user=,db=,app=,client= LOG:  entering standby mode
+2026-02-19 06:34:41 UTC [4609]: [3-1] user=,db=,app=,client= FATAL:  requested timeline 9 is not a child of this server's history
+2026-02-19 06:34:41 UTC [4609]: [4-1] user=,db=,app=,client= DETAIL:  Latest checkpoint is at 0/6000028 on timeline 8, but in the history of the requested timeline, the server forked off from that timeline at 0/50A8F20.
+2026-02-19 06:34:41 UTC [4610]: [1-1] user=[unknown],db=[unknown],app=[unknown],client=127.0.0.1 LOG:  connection received: host=127.0.0.1 port=47334
+2026-02-19 06:34:41 UTC [4610]: [2-1] user=postgres,db=postgres,app=[unknown],client=127.0.0.1 FATAL:  the database system is starting up
+2026-02-19 06:34:41 UTC [4604]: [7-1] user=,db=,app=,client= LOG:  startup process (PID 4609) exited with exit code 1
+2026-02-19 06:34:41 UTC [4604]: [8-1] user=,db=,app=,client= LOG:  aborting startup due to startup process failure
+2026-02-19 06:34:41 UTC [4604]: [9-1] user=,db=,app=,client= LOG:  database system is shut down
+```
+</details>
+
+
+Проблема: 
+```
+2026-02-19 06:34:41 UTC [4609]: [3-1] user=,db=,app=,client= FATAL:  requested timeline 9 is not a child of this server's history
+2026-02-19 06:34:41 UTC [4609]: [4-1] user=,db=,app=,client= DETAIL:  Latest checkpoint is at 0/6000028 on timeline 8, but in the history of the requested timeline, the server forked off from that timeline at 0/50A8F20.
+```
+Данная ошибка свидетельствует о несоответсвии временной шкалы, что можно было наблюдать на скриншоте в начале раздела №4(скриншот статуса кластера). На нем видно, что поле TL(timeline) разное у `patroni_node2` с `patroni_node1` и `patroni_node3`. В PostgreSQL TL используется для отслежевания точек восстановления после восстановления или как в нашем случае `failover`.
+После `failover`, когда `patroni_node3` стал лидером, он, создал новую временную шкалу `(timeline 9)`, начав запись `WAL` с того места, где остановился предыдущий лидер. Узел `patroni_node2`, который был отключен до `failover`, оставался на старой временной шкале `(timeline 8)`. Когда `Patroni` на `node2` попытался запустить `PostgreSQL` и синхронизироваться с кластером, `PostgreSQL` обнаружил, что ему предлагается восстановиться на `timeline 9`, которая не является продолжением его текущей истории `(timeline 8)`. Соответственно, `patroni_node2` не может синхронизироваться, так как его данные устарели и принадлежат к "мертвой" ветке истории `WAL`. Для восстановления узла в кластер требуется процедура `reinit`, которая пересоздаст его данные с помощью `pg_basebackup` с текущего лидера, приведя его в актуальное состояние на `timeline 9`:
+```
+patronictl -c /etc/patroni/conf.yml reinit patroni_cluster patroni_node2
+```
+
+Как видно, `node2` восстановлена. Также, можно заметить, что теперь её роль `Sync Standby`:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/21.jpg)
+
+На картинке ниже видна собранная статистика `HAProxy` по кластеру `Patroni`, и видно, что ее показания "бъются" с реальной картиной:
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/22.jpg)
+
+## 4.2 Проверка работоспособонсти кластера
+
+После "аварийной" ситуации соответствующий трафик должен быть направлен на соответсвующие ноды кластера. Проверим, подключившись для этого к узлу `HAProxy` по портам `5000(Leader)` и `5001(Replica)`:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/23.jpg)
+
+Как видно со скриншота, перенаправление подключений соответсвующему трафику работает. Доказывает это запрос `select pg_is_in_recovery();` на двух нодах, где `t` - реплика; `f` - лидер. А также проделанные операции и их результаты.
+
+## 4.3 Восстановление "упавшей" ноды
+
+Запустим службу Patroni на `node1`:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/24.jpg)
+
+Видно, что `node1` запущена, работает и синхронизирована с остальными нодами. Посмотрим на статистику `HAProxy`:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/25.jpg)
+
+На ней также видно, что `node1` запущена, и работает исправно.
+
+## 4.4 Итог
+
+Мы успешно имитрировали аварийную ситуацию, а также произошла непредвиденная ошибка по рассинхронизации TL, которая была исправлена. 
+После восстановления кластера, ождиаемые роли были заняты соответствующими нодами:
+1) `patroni_node1` является репликой кластера;
+2) `patroni_node2` является стэндбаем кластера;
+3) `patroni_node3` является лидером кластера.
