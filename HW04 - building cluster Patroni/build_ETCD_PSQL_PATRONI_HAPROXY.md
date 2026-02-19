@@ -126,7 +126,7 @@ sudo apt -y install postgresql
 ## 2.3 Шаг 3. Установка и настройка кластера Patroni
 
 Patroni будет крутиться в изолированной среде Python для того, чтобы не нарушать систему, контролировать зависимости.
-Создавать виртуальное окружение Patroni будем при помощи `python3.12-venv`. Для того, чтобы воспользоваться виртуальным окружением, требуется каталог для него, владелец каталога должен быть `postgres`. Также незабываем установить Patroni и драйвер для работы Patroni c PostgreSQL. Все это продемонстрированно на рисунках ниже:
+Создавать виртуальное окружение Patroni будем при помощи `python3.12-venv`. Для того, чтобы воспользоваться виртуальным окружением, требуется каталог для него, владелец каталога должен быть `postgres`. Также незабываем установить Patroni и драйвер для работы Patroni c PostgreSQL. Все это продемонстрировано на рисунках ниже:
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/5.jpg)
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/6.jpg)
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/4_v2/7.jpg)
