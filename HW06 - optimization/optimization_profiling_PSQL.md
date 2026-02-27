@@ -497,23 +497,533 @@ pgbench -h 10.92.36.102 -p 5432 -U test_bench -c 50 -j 2 -P 60 -T 600 benchdb
 
 На кртинке выше видно, что симуляция подключений прошла успешно. За время выполнения симуляции`(-T = 600 секунд => 10 минут)` удалось произвести `192381` транзакций с пропускной способностью `320(tps)` транзакций в секунду. 
 
-Далее увеличим количество одновременных подключений более максимума: `-с = 100`. Данный тест покажет как поведет себя БД при массовом притоке подключений:
+Далее увеличим количество одновременных подключений более максимума: `-с = 120`. Данный тест покажет как поведет себя БД при массовом притоке подключений:
 ![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/8.jpg)
+На картинке видно, что `pgbench` не может создать 50 коннектов к тестовой БД. Судя по всему можно решить данную проблему подключением `pgBouncer`, либо его аналогов. Также в теории будет прирост TPS, что проверим а практике.
+
+## 2.3 Подключение pgBouncer
+
+Установим `pgBouncer`:
+```
+sudo apt-get -y install pgbouncer
+```
+
+Далее отредактируем файл инициализации `pgBouncer` `/etc/pgbouncer/pgbouncer.ini`:
+<details>
+<summary>pgbouncer.ini</summary>
+  
+```
+* = host=localhost port=5432 ; Добавим запись в секцию [databases] хоста где лежит PostgreSQL, а также его порт.
+listen_addr = * ; Адрес, на котором будет крутится pgBouncer
+max_client_conn = 500 ; Изменим количество максимально открытых сессий для pgBouncer
+listen_port = 6432 ; Изменим номер порта для pgBouncer
+```
+</details>
+
+После чего, нужно создать список пользователей в `/etc/pgbouncer/userlist.txt`, которые будут иметь доступ для открытия коннекта к БД. Файл в формате:
+```
+"DB_USER" "PASSWORD"
+```
+
+Настройка пуллера окончена. Запускаем его через: `systemctl enable --now pgbouncer`
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/9.jpg)
+
+## 2.4 Тестирование пула соединений
+
+<details>
+<summary>97 коннектов без пуллера</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 5432 -U test_bench -c 97 -j 2 -P 10 -T 60 benchdb
+Password:
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+progress: 10.0 s, 329.7 tps, lat 260.038 ms stddev 105.418, 0 failed
+progress: 20.0 s, 369.6 tps, lat 263.312 ms stddev 98.985, 0 failed
+progress: 30.0 s, 320.6 tps, lat 299.074 ms stddev 128.362, 0 failed
+progress: 40.0 s, 273.4 tps, lat 358.147 ms stddev 179.145, 0 failed
+progress: 50.0 s, 258.8 tps, lat 368.680 ms stddev 177.490, 0 failed
+progress: 60.0 s, 288.1 tps, lat 341.715 ms stddev 179.898, 0 failed
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 97
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 18499
+number of failed transactions: 0 (0.000%)
+latency average = 310.155 ms
+latency stddev = 151.459 ms
+initial connection time = 1006.665 ms
+tps = 312.176658 (without initial connection time)
+```
+</details>
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password:
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 432.7 tps, lat 114.207 ms stddev 85.885, 0 failed
+progress: 20.0 s, 433.4 tps, lat 115.241 ms stddev 44.894, 0 failed
+progress: 30.0 s, 338.0 tps, lat 148.215 ms stddev 64.865, 0 failed
+progress: 40.0 s, 270.7 tps, lat 184.369 ms stddev 74.058, 0 failed
+progress: 50.0 s, 349.2 tps, lat 143.831 ms stddev 63.508, 0 failed
+progress: 60.0 s, 372.2 tps, lat 134.213 ms stddev 63.232, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 22082
+number of failed transactions: 0 (0.000%)
+latency average = 326.867 ms
+latency stddev = 3377.046 ms
+initial connection time = 40.584 ms
+tps = 366.613519 (without initial connection time)
+```
+</details>
 
 
+Запуск теста без пуллера: tps = 312.176658 (without initial connection time)
+Запуск теста с пуллером: tps = 366.613519 (without initial connection time)
+Как выидно, при массовом притоке коннектов к БД с пуллером, обработанных транзакций больше. Плюсом данного решения является расширение количества обрбатываемых запросов за счет пуллера, если БД столкнется с количеством коннектов, привышающим `max_connections`, то в таком случае запросы(не влезающие в количество разрешенных) на коннет будут отклонены. 
 
-## 2.3 Тестирование пула соединений
-
-
+Для большей производительности PostgreSQL можно оптимизировать его настройки, что будет описано в следующем разделе. 
 
 ### 3. Оптимизируйте настройки PostgreSQL для максимальной производительности.
 
+Данная статья будет описывать что нужно сделать, перед тем как оптимизировать настройки PostgreSQL. И состоит из нескольких подпунктов:
+
+- 3.1 Проверка памяти
+- 3.2 Тюнинг настроек PostgreSQL
+
+Перед дальнейшим тестированием зафиксируем резльтаты от pgbench:
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 527.9 tps, lat 93.660 ms stddev 74.516, 0 failed
+progress: 20.0 s, 430.8 tps, lat 116.107 ms stddev 54.415, 0 failed
+progress: 30.0 s, 340.0 tps, lat 147.349 ms stddev 66.303, 0 failed
+progress: 40.0 s, 256.6 tps, lat 192.896 ms stddev 84.797, 0 failed
+progress: 50.0 s, 325.1 tps, lat 154.401 ms stddev 72.313, 0 failed
+progress: 60.0 s, 354.7 tps, lat 141.092 ms stddev 63.909, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 22471
+number of failed transactions: 0 (0.000%)
+latency average = 321.066 ms
+latency stddev = 3346.807 ms
+initial connection time = 34.159 ms
+tps = 373.173324 (without initial connection time)
+```
+</details>
+
+Зафиксировали: `tps = 373.173324` и `latency average = 321.066 ms`
+
+## 3.1 Проверка памяти. 
+
+Если БД работает с большими данными, то естьт смысл включить huge pages. В Linux работа с памятью основывается на обращении к страницам, размер которых равен 4 кВ. А значит, когда объем памяти становиться большим управление нею становится сложнее. Поэтому разумно использовать большие страницы, размер которых начинается с 2 МВ. За счет использования huge pages можно получить прирост к быстродействию системы. 
+И так, проверяем ядро на поддержку huge pages:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/10.jpg)
+
+Текущие значения больших страниц:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/11.jpg)
+
+
+Получаем PID PostgreSQL:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/12.jpg)
+
+Пиковая виртуальная память для PostgreSQL:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/13.jpg)
+
+Расчитываем прибилизительное количество huge pages и устанавливаем его:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/14.jpg)
+
+Влючаем huge pages:
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/15.jpg)
+
+# Отключение THP:
+
+THP — это механизм ядра Linux, который автоматически пытается использовать огромные страницы памяти вместо стандартных маленьких страниц для любого процесса в системе или по запросу.
+Отключение THP часто рекомендуют для систем, где работает PostgreSQL чтобы избежать потенциальных проблем с производительностью, связанных с автоматическим управлением огромными страницами ядром.
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/16.jpg)
+
+# swappiness:
+
+swappiness–определяет частоту сброса данных из RAM в SWAP(значение от 0 до 200). Для PostgreSQLрекомендуется от 1 до 5.
+
+![КАРТИНКА](https://github.com/FridrihTech21/OTUS-home-work/blob/main/project/lab_6/17.jpg)
+
+
+
+## 3.2 Тюнинг настроек PostgreSQL
+
+Изменим параметры в `postgresql.auto.conf` для большей производительности нашей БД с учетом аппаратной части сервера.
+
+<details>
+<summary>postgresql.auto.conf</summary>
+  
+```
+max_connections = 100
+shared_buffers = 512MB
+effective_cache_size = 1536MB
+maintenance_work_mem = 128MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 200
+work_mem = 2621kB
+huge_pages = off
+min_wal_size = 2GB
+max_wal_size = 8GB
+```
+</details>
 
 
 ### 4. Проверьте, насколько выросла производительность.
 
+## 4.1.1 Поcле применения page huges показатели улучшились:
 
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 513.6 tps, lat 96.405 ms stddev 71.452, 0 failed
+progress: 20.0 s, 461.7 tps, lat 108.269 ms stddev 48.497, 0 failed
+progress: 30.0 s, 386.5 tps, lat 129.372 ms stddev 60.398, 0 failed
+progress: 40.0 s, 332.1 tps, lat 149.880 ms stddev 70.113, 0 failed
+progress: 50.0 s, 314.7 tps, lat 159.068 ms stddev 75.112, 0 failed
+progress: 60.0 s, 412.2 tps, lat 121.752 ms stddev 57.637, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 24328
+number of failed transactions: 0 (0.000%)
+latency average = 296.209 ms
+latency stddev = 3213.131 ms
+initial connection time = 33.417 ms
+tps = 404.099289 (without initial connection time)
+```
+</details>
+
+----------------------------------------------------
+Было:
+
+- Среднее время выполнения: `latency average = 321.066 ms`
+
+- `TPS`: `tps = 373.173324`  
+
+----------------------------------------------------
+
+Стало: 
+
+- Среднее время выполнения сократилось: `latency average = 296.209 ms`
+
+- `TPS` поднялся: `tps = 404.099289 (without initial connection time)`
+
+----------------------------------------------------
+
+## 4.1.2 Поcле отключения THP показатели улучшились:
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 623.5 tps, lat 79.563 ms stddev 66.946, 0 failed
+progress: 20.0 s, 470.8 tps, lat 105.476 ms stddev 54.797, 0 failed
+progress: 30.0 s, 416.3 tps, lat 120.709 ms stddev 57.628, 0 failed
+progress: 40.0 s, 341.0 tps, lat 145.947 ms stddev 72.501, 0 failed
+progress: 50.0 s, 284.8 tps, lat 176.133 ms stddev 74.739, 0 failed
+progress: 60.0 s, 342.9 tps, lat 145.107 ms stddev 72.674, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 24913
+number of failed transactions: 0 (0.000%)
+latency average = 289.546 ms
+latency stddev = 3180.559 ms
+initial connection time = 33.278 ms
+tps = 413.593608 (without initial connection time)
+```
+</details>
+
+----------------------------------------------------
+Было:
+
+- Среднее время выполнения: `latency average = 296.209 ms`
+
+- `TPS`: `tps = 404.099289 (without initial connection time)`
+
+----------------------------------------------------
+
+Стало: 
+
+- Среднее время выполнения сократилось: `latency average = 289.546 ms`
+
+- `TPS` поднялся: `tps = 413.593608 (without initial connection time)`
+
+---------------------------------------------------- 
+
+## 4.1.3 Поcле отключения THP показатели улучшились:
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 626.1 tps, lat 79.147 ms stddev 64.812, 0 failed
+progress: 20.0 s, 483.8 tps, lat 102.670 ms stddev 53.037, 0 failed
+progress: 30.0 s, 414.7 tps, lat 121.466 ms stddev 57.377, 0 failed
+progress: 40.0 s, 316.7 tps, lat 156.739 ms stddev 80.123, 0 failed
+progress: 50.0 s, 294.0 tps, lat 170.026 ms stddev 79.282, 0 failed
+progress: 60.0 s, 408.8 tps, lat 122.328 ms stddev 59.381, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 25561
+number of failed transactions: 0 (0.000%)
+latency average = 282.110 ms
+latency stddev = 3137.499 ms
+initial connection time = 31.711 ms
+tps = 424.777859 (without initial connection time)
+```
+</details>
+
+----------------------------------------------------
+Было:
+
+- Среднее время выполнения: `latency average = 289.546 ms`
+
+- `TPS`: `tps = 413.593608 (without initial connection time)`
+
+----------------------------------------------------
+
+Стало: 
+
+- Среднее время выполнения сократилось: `latency average = 282.110 ms`
+
+- `TPS` поднялся: `tps = 424.777859 (without initial connection time)`
+
+---------------------------------------------------- 
+
+## 4.1.3 Поcле отключения THP показатели улучшились:
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 426.1 tps, lat 116.318 ms stddev 86.287, 0 failed
+progress: 20.0 s, 440.0 tps, lat 113.537 ms stddev 38.240, 0 failed
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 29813
+number of failed transactions: 0 (0.000%)
+latency average = 241.704 ms
+latency stddev = 2903.890 ms
+initial connection time = 33.072 ms
+tps = 495.816196 (without initial connection time)
+```
+</details>
+
+----------------------------------------------------
+Было:
+
+- Среднее время выполнения: `latency average = 282.110 ms`
+
+- `TPS`: `tps = 424.777859 (without initial connection time)`
+
+----------------------------------------------------
+
+Стало: 
+
+- Среднее время выполнения сократилось: `latency average = 241.704 ms`
+
+- `TPS` поднялся: `tps = 495.816196 (without initial connection time)`
+
+Как видим производительность БД поднялась еще выше. Пока это максимальная точка, которй удалось добится без особых рисков.
 
 ### 5. Настройте кластер на оптимальную производительность, не обращая внимания на стабильность БД.
 
+Исходя из задания `Настройте кластер на оптимальную производительность, не обращая внимания на стабильность БД`, мы будем максимально увеличивать параметры, влияющие на скорость обработки данных, жертвуя надежностью, устойчивостью к сбоям, безопасностью и возможностью восстановления в случае проблем.
+Данную конфигурацию применять на реальных системах НЕЛЬЗЯ.
 
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+huge_pages = 'on'
+
+max_connections = 100
+shared_buffers = 512MB
+effective_cache_size = 1536MB
+maintenance_work_mem = 128MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 200
+work_mem = 2621kB
+huge_pages = off
+min_wal_size = 2GB
+max_wal_size = 8GB
+
+
+
+fsync = off                    # Отключает синхронизацию WAL на диск. Критический риск потери данных.
+synchronous_commit = off       # Отключает ожидание подтверждения записи WAL. Повышает скорость, но теряются транзакции при сбое.
+full_page_writes = off
+
+maintenance_work_mem = 512MB   # Увеличиваем для быстрых операций обслуживания
+work_mem = 20MB                # Увеличиваем для более быстрых сортировок/соединений в памяти.
+
+wal_buffers = 64MB             # Увеличиваем буфер WAL для уменьшения частоты синхронизации. Риск потери данных из буфера при сбое.
+min_wal_size = 4GB             # Увеличиваем минимальный размер WAL.
+max_wal_size = 16GB            # Увеличиваем максимальный размер WAL. Уменьшает частоту контрольных точек, но увеличивает время восстановления.
+checkpoint_completion_target = 0.95 # Увеличиваем для более плавного выполнения контрольной точки.
+
+logging_collector = off        # Отключаем сбор логов в файлы. Полезно для отладки, но замедляет работу.
+log_checkpoints = off          # Отключаем логирование контрольных точек.
+log_connections = off          # Отключаем логирование подключений.
+log_disconnections = off       # Отключаем логирование отключений.
+log_lock_waits = off           # Отключаем логирование ожиданий блокировок.
+log_temp_files = -1            # Не логировать создание временных файлов.
+log_min_duration_statement = -1 # Не логировать медленные запросы.
+
+bgwriter_delay = 100ms         # Уменьшаем задержку между циклами фоновой записи.
+bgwriter_lru_maxpages = 200    # Увеличиваем количество страниц, записываемых за цикл.
+```
+</details>
+
+Запуск теста с конфигурацией выше:
+
+<details>
+<summary>120 коннектов с пуллером</summary>
+  
+```
+postgres@tarasov-postgre-advance-1:~$ pgbench -h 10.92.36.102 -p 6432 -U test_bench -c 120 -j 2 -P 10 -T 60 benchdb
+Password: 
+pgbench (18.2 (Ubuntu 18.2-1.pgdg24.04+1))
+starting vacuum...end.
+NOTICE:  No server connection available in postgres backend, client being queued
+progress: 10.0 s, 526.1 tps, lat 94.111 ms stddev 80.914, 0 failed
+progress: 20.0 s, 536.3 tps, lat 93.197 ms stddev 54.914, 0 failed
+progress: 30.0 s, 534.8 tps, lat 93.476 ms stddev 71.732, 0 failed
+progress: 40.0 s, 652.1 tps, lat 76.717 ms stddev 58.884, 0 failed
+progress: 50.0 s, 717.4 tps, lat 69.765 ms stddev 54.342, 0 failed
+progress: 60.0 s, 725.3 tps, lat 68.903 ms stddev 64.342, 0 failed
+NOTICE:  No server connection available in postgres backend, client being queued
+NOTICE:  No server connection available in postgres backend, client being queued
+...
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 100
+query mode: simple
+number of clients: 120
+number of threads: 2
+maximum number of tries: 1
+duration: 60 s
+number of transactions actually processed: 37040
+number of failed transactions: 0 (0.000%)
+latency average = 194.652 ms
+latency stddev = 2608.032 ms
+initial connection time = 30.451 ms
+tps = 615.663889 (without initial connection time)
+```
+</details>
+
+----------------------------------------------------
+Было:
+
+- Среднее время выполнения: `latency average = 241.704 ms`
+
+- `TPS`: `tps = 495.816196 (without initial connection time)`
+
+----------------------------------------------------
+
+Стало: 
+
+- Среднее время выполнения сократилось: `latency average = 194.652 ms`
+
+- `TPS` поднялся: `tps = 615.663889 (without initial connection time)`
+
+Исходя из результата последнего тестирования можно сделать вывод о максимальном приросте обрботки операций БД с данными параметрами.
+Но данная конфигурация может привести к печальным результатам на реальных системах. 
