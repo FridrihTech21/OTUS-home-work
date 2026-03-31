@@ -239,3 +239,228 @@ sudo systemctl start patroni
 
 <img width="758" height="206" alt="image" src="https://github.com/user-attachments/assets/5f5e353e-1fd0-4b9f-a2fd-ccca3f8d5f21" />
 
+# 4. Попробуем установить кластер Etcd, Patroni при помощи Ansible
+
+Проводить установку будем с отдельной машины, например, с будущего балансера. Для этого установим Ansible:
+```
+sudo apt update && sudo apt install software-properties-common && sudo add-apt-repository --yes --update ppa:ansible/ansible && sudo apt install ansible
+```
+
+<img width="835" height="203" alt="image" src="https://github.com/user-attachments/assets/f41fca82-36a3-47cb-bcca-ceea8ffccae8" />
+
+После чего, настроим сетевую связность к машинам второго кластера:
+```
+sudo tee -a /etc/hosts <<EOF
+10.92.36.113 tarasov-test-otus-cluter-2-node-1.ru-central1.internal
+10.92.36.50 tarasov-test-otus-cluter-2-node-2.ru-central1.internal
+10.92.36.24 tarasov-test-otus-cluter-2-node-3.ru-central1.internal
+10.92.5.112 tarasov-test-otus-balancer.ru-central1.internal
+EOF
+```
+
+Создаем ключи и добавляем их на каждую машину:
+
+```
+ssh-keygen
+
+sudo tee -a ~/.ssh/authorized_keys << EOF
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHDVA7NAl2EqlYv1sdyWOvBQDuLHRxUeAzqBPYlZQHSt tarasov-test-otus-balancer
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMW+LvQxHWfqMobyOsE5ygoVmosY4IhSMn8CwxbCiDAw tarasov-test-otus-cluter-2-node-1
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPzGyks1x6cagWgeZxbOjQlMDsmTQbVfghVjhwNmkrQh tarasov-test-otus-cluter-2-node-2
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIBCruOHXF1exFFJcSNelfi/sHSap5NV4MpsTluZuamT tarasov-test-otus-cluter-2-node-3
+EOF
+```
+
+Не забываем добавить пользователя, подк отороым будет работать Ansible в `sudo`: `sudo usermod -aG sudo fvtarasov`
+
+Подготовили `inventory`-файл и протестировали соединение:
+<img width="1358" height="486" alt="image" src="https://github.com/user-attachments/assets/9cee7b1c-ba70-4e23-ab13-6e14bb1abcb5" />
+
+<details>
+<summary>inventory.ini</summary>
+  
+```yml
+[servers]
+tarasov-test-otus-cluter-2-node-1.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-cluter-2-node-2.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-cluter-2-node-3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+```
+</details>
+
+Теперь добавим `playbook`, в котором обновим пакеты на целевых машинах:
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+tee -a setup.yml << EOF
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Обновление списка пакетов
+      ansible.builtin.apt:
+        update_cache: yes
+EOF
+```
+</details>
+
+<img width="1358" height="461" alt="image" src="https://github.com/user-attachments/assets/92edee15-a073-47ff-a96f-464a8680a96e" />
+
+
+## 4.1 Etcd
+
+Приступим к установке Etcd:
+<img width="1357" height="917" alt="image" src="https://github.com/user-attachments/assets/93cb9a31-d828-4c64-a00b-f6c1d93e0e09" />
+
+Дерево объектов Ansible установки Etcd:
+<img width="497" height="146" alt="image" src="https://github.com/user-attachments/assets/e9495e22-627d-4f79-83df-6200db748bf3" />
+
+`inventory.ini` - файл, содержащий информацию об хостах
+`setup.yml` - плейбук Ansible
+`etcd.j2` - файл-шаблон для подстановки значений в конфиг-файл Etcd
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+tee -a setup.yml << EOF
+---
+- name: Configure etcd cluster
+  hosts: servers 
+  become: yes
+  gather_facts: yes 
+  vars:
+    etcd_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    etcd_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | zip(['etcd1', 'etcd2', 'etcd3'])
+        | map('reverse')
+        | map('join', '=')
+        | map('regex_replace', '^(.*)=(.*)$', '\\1=http://\\2:2380')
+        | join(',')
+      }}
+    etcd_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    etcd_names_map: ['etcd1', 'etcd2', 'etcd3']
+    etcd_node_name: "{{ etcd_names_map[etcd_node_index] }}"
+  tasks:
+    - name: Install etcd-server
+      ansible.builtin.apt:
+        name: etcd-server
+        update_cache: yes
+        state: present 
+    - name: Install etcd-client
+      ansible.builtin.apt:
+        name: etcd-client
+        update_cache: yes
+        state: present 
+    - name: Ensure /etc/default directory exists
+      ansible.builtin.file:
+        path: /etc/default
+        state: directory
+        mode: '0755'
+    - name: Copy Etcd configuration template to /etc/default/etcd
+      ansible.builtin.template:
+        src: etcd.j2 
+        dest: /etc/default/etcd
+        owner: fvtarasov
+        group: fvtarasov
+        mode: '0644' 
+    - name: Restart Etcd service
+      ansible.builtin.systemd_service:
+        name: etcd.service
+        state: restarted
+EOF
+```
+</details>
+
+### 4.1.1 setup.yml
+
+```yml
+---
+- name: Configure etcd cluster
+  hosts: servers 
+  become: yes
+  gather_facts: yes 
+  vars:
+    etcd_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    etcd_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | zip(['etcd1', 'etcd2', 'etcd3'])
+        | map('reverse')
+        | map('join', '=')
+        | map('regex_replace', '^(.*)=(.*)$', '\\1=http://\\2:2380')
+        | join(',')
+      }}
+    etcd_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    etcd_names_map: ['etcd1', 'etcd2', 'etcd3']
+    etcd_node_name: "{{ etcd_names_map[etcd_node_index] }}"
+```
+Плейбук, в процессе собирает информацию о хостах: IP, FQDN и т.д. Создает список всех хостов из инвентори, чтобы далее вставлять нужные значения в нужные переменные конфиг-файла Etcd.
+
+После чего, выполняет основные пункты для установки ETCD:
+```yml
+ tasks:
+    - name: Install etcd-server
+      ansible.builtin.apt:
+        name: etcd-server
+        update_cache: yes
+        state: present 
+    - name: Install etcd-client
+      ansible.builtin.apt:
+        name: etcd-client
+        update_cache: yes
+        state: present 
+    - name: Ensure /etc/default directory exists
+      ansible.builtin.file:
+        path: /etc/default
+        state: directory
+        mode: '0755'
+    - name: Copy Etcd configuration template to /etc/default/etcd
+      ansible.builtin.template:
+        src: etcd.j2 
+        dest: /etc/default/etcd
+        owner: fvtarasov
+        group: fvtarasov
+        mode: '0644' 
+    - name: Restart Etcd service
+      ansible.builtin.systemd_service:
+        name: etcd.service
+        state: restarted
+```
+
+`- name: Copy Etcd configuration template to /etc/default/etcd` - данный таск вставляет шаблон для конфиг-файла:
+
+```yml
+ETCD_NAME="{{ etcd_node_name }}"
+ETCD_LISTEN_CLIENT_URLS="http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:2379,http://localhost:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://{{ ansible_fqdn }}:2379"
+ETCD_LISTEN_PEER_URLS="http://{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:2380"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://{{ ansible_fqdn }}:2380"
+ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
+ETCD_INITIAL_CLUSTER="{{ etcd_initial_cluster_string }}"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_DATA_DIR="/var/lib/etcd"
+ETCD_ELECTION_TIMEOUT="10000"
+ETCD_HEARTBEAT_INTERVAL="2000"
+ETCD_INITIAL_ELECTION_TICK_ADVANCE="false"
+ETCD_ENABLE_V2="true"
+```
+
+`etcd_node_name` - одномерный массив, из которого по индексам "вытягивается" название для каждой отдельной ноды Etcd
+
+`hostvars[inventory_hostname]['ansible_default_ipv4']['address']` - вытягиваем ip адрес из `hostvars`
+
+`ansible_fqdn` - узнаем FQDN машины
+
+`etcd_initial_cluster_string` - конкатенируем все FQDN и их порты для внесения в переменную: `ETCD_INITIAL_CLUSTER`
+
+Проверим, что кластер Etcd из трех нод установлен:
+<img width="1339" height="149" alt="image" src="https://github.com/user-attachments/assets/fab18445-15fd-4c42-bea3-44305da38dbe" />
+
+## 4.2 PostgreSQL
