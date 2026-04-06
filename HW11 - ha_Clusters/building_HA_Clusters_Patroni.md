@@ -464,3 +464,98 @@ ETCD_ENABLE_V2="true"
 <img width="1339" height="149" alt="image" src="https://github.com/user-attachments/assets/fab18445-15fd-4c42-bea3-44305da38dbe" />
 
 ## 4.2 PostgreSQL
+
+Далее соберем `ansible-playbook` для установки PostgreSQL и немного подготвки к установке Patroni:
+- `sudo apt -y install postgresql`;
+- Проверка на пользователя replicator;
+- Создать пользователя replicator;
+- Добавить записи на разрешения коннекта к БД в pg_hba.conf;
+- Отредактировать звапись listen_address, для прослушивания всех адресов;
+- Рестарт PostgreSQL;
+- Удаление содержимого PGDATA на нодах.
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+
+tee setup.yml << EOF
+---
+- name: Configure etcd cluster
+  hosts: servers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Install python3-pip
+      ansible.builtin.apt:
+        name: python3-pip
+        update_cache: yes
+        state: present
+    - name: Install python3-psycopg2
+      ansible.builtin.apt:
+        name: python3-psycopg2
+        update_cache: yes
+        state: present       
+    - name: Install postgresql-server
+      ansible.builtin.apt:
+        name: postgresql
+        update_cache: yes
+        state: present
+    - name: Grant all all from network 0.0.0.0/0 access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: host
+        users: all
+        source: 0.0.0.0/0
+        databases: all
+        method: scram-sha-256
+    - name: Grant all postgres from local access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: local
+        users: postgres
+        databases: all
+        method: trust
+    - name: Grant replicator replicator from host access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: host
+        users: replicator
+        source: 0.0.0.0/0
+        databases: replicator
+        method: scram-sha-256
+    - name: Replace a listen_addresses = '*'
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/16/main/postgresql.conf
+        search_string: '#listen_addresses' 
+        line: listen_addresses = '*'  
+    - name: Restart PostgreSQL service
+      ansible.builtin.systemd_service:
+        name: postgresql.service
+        state: restarted    
+    - name: Delete if exist user replicator
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: drop user if exists replicator
+    - name: Create user replicator
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: create user replicator login encrypted password 'password'
+    - name: Stopped PostgreSQL service
+      ansible.builtin.systemd_service:
+        name: postgresql.service
+        state: stopped   
+    - name: Recursively remove directory
+      ansible.builtin.file:
+        path: /var/lib/postgresql/16/main/
+        state: absent
+      become: yes
+EOF
+
+```
+</details>
+
+<img width="1725" height="927" alt="image" src="https://github.com/user-attachments/assets/4f77653d-60eb-42e8-b525-655ad7e1c3ed" />
+
+По картинке сверху видно, что все эшены плейбука выполнились успешно.
