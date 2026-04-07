@@ -794,4 +794,47 @@ tags:
 
 Все работает и все взлетело! 
 
+# 5. Репликация
+
+Будем настраивать логическую репликацию. Т.к. ее настройка выполняется проще, и подойдет для тестовых целей целиком.
+Прежде, удостоверимся, что кластера работают в норме:
+
+Кластер-1:
+<img width="1797" height="341" alt="image" src="https://github.com/user-attachments/assets/087d533c-8426-44f8-8ee5-a157e094fb8c" />
+Кластер-2:
+<img width="1793" height="337" alt="image" src="https://github.com/user-attachments/assets/d868e9cc-f651-4122-8fe4-917f752b12b0" />
+
+## 5.1 Начало
+
+Создадим тестовую БД, наполним ее на стороне `primary` кластера.
+Создадим публикацию и подписку, на кластере `primary` будет расположена публикация, на кластере `secondary` будет расположена подписка.
+
+Конектимся к лидерам, например с удаленной машины при помощи установленного клиента psql:
+```bash
+psql -h 10.92.36.113 -d postgres -U postgres
+psql -h 10.92.35.112 -d postgres -U postgres
+```
+<img width="1682" height="225" alt="image" src="https://github.com/user-attachments/assets/240c90cd-9af4-4362-9117-7d94df60df25" />
+
+На кластере пубикации `cluter-1`(10.92.35.112) и подписки `cluter-2`(10.92.36.113) создадим тестовую БД:
+```sql
+postgres=# CREATE USER test_log_repl WITH SUPERUSER;
+CREATE ROLE
+postgres=# CREATE DATABASE repl_db WITH OWNER=test_log_repl;
+CREATE DATABASE
+postgres=# ALTER USER test_log_repl WITH PASSWORD 'qwerty@123';
+ALTER ROLE 
+postgres=#
+```
+
+<img width="1673" height="368" alt="image" src="https://github.com/user-attachments/assets/62956428-dc30-46d7-89b5-d472d4e06aab" />
+
+Наполним тестовые таблицы данными:
+<img width="740" height="570" alt="image" src="https://github.com/user-attachments/assets/4af90a2b-21dc-4d16-b7f3-cb4889500518" />
+<img width="825" height="286" alt="image" src="https://github.com/user-attachments/assets/62d3f27c-a349-42a7-83a6-56f6f0251107" />
+
+
+
+
+
 
