@@ -559,3 +559,217 @@ EOF
 <img width="1725" height="927" alt="image" src="https://github.com/user-attachments/assets/4f77653d-60eb-42e8-b525-655ad7e1c3ed" />
 
 По картинке сверху видно, что все эшены плейбука выполнились успешно.
+
+## 4.3 Patroni
+
+Плэйбук с установкой Patroni содержит основные экшены:
+- `Systemd patroni.service stop if exist` - проверка на запущенный Patroni
+- `Install python3.12-venv`
+- `Install acl package for proper file permissions when becoming unprivileged user` - установка acl для ansible
+- `Create a directory /opt/patroni if it does not exist`
+- `Creating virtual environment`
+- `Install patroni[etcd3] into virtual environment, inheriting globally installed modules`
+- `Install python3-psycopg2 into virtual environment, inheriting globally installed modules`
+- `Create PGDATA directory /data/16 if it does not exist`
+- `Create log directory /data/log/patroni if it does not exist`
+- `Create etc patroni directory /etc/patroni if it does not exist`
+- `Copy Patroni configuration template to /etc/patroni/conf.yml` - копирование шаблона конфига Patroni patroni.j2
+- `Create sysd Patroni`
+- `Systemd reload, enabled adn starting patroni.service`
+
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+
+tee setup.yml << EOF
+---
+- name: Configure etcd cluster
+  hosts: servers
+  become: yes
+  gather_facts: yes
+  vars:
+    patroni_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    patroni_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | map('regex_replace', '^(.*?)(:[0-9]+)?$', '\1:2379')
+        | join(',')
+      }}
+    patroni_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    patroni_names_map: ['patroni_node1', 'patroni_node2', 'patroni_node3']
+    patroni_node: "{{ patroni_names_map[patroni_node_index] }}"
+    patroni_replicator_ips: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_default_ipv4', 'address'])
+        | select('defined')
+        | list
+      }}
+
+  tasks:
+    - name: Systemd patroni.service stop if exist
+      ansible.builtin.systemd_service:
+        name: patroni.service
+        state: stopped
+    - name: Install python3.12-venv
+      ansible.builtin.apt:
+        name: python3.12-venv
+        update_cache: yes
+        state: present
+    - name: Install acl package for proper file permissions when becoming unprivileged user
+      ansible.builtin.apt:
+        name: acl
+        update_cache: yes
+        state: present
+    - name: Create a directory /opt/patroni if it does not exist
+      ansible.builtin.file:
+        path: /opt/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Creating virtual environment
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/patroni/venv
+      become: yes
+      become_user: postgres
+    - name: Install patroni[etcd3] into virtual environment, inheriting globally installed modules        
+      ansible.builtin.pip:
+        name: patroni[etcd3]
+        virtualenv: /opt/patroni/venv
+        virtualenv_site_packages: yes
+    - name: Install python3-psycopg2 into virtual environment, inheriting globally installed modules
+      ansible.builtin.pip:
+        name: psycopg2-binary
+        virtualenv: /opt/patroni/venv
+        virtualenv_site_packages: yes
+    - name: Create PGDATA directory /data/16 if it does not exist
+      ansible.builtin.file:
+        path: /data/16
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0700'
+    - name: Create log directory /data/log/patroni if it does not exist
+      ansible.builtin.file:
+        path: /data/log/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Create etc patroni directory /etc/patroni if it does not exist
+      ansible.builtin.file:
+        path: /etc/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Copy Patroni configuration template to /etc/patroni/conf.yml
+      ansible.builtin.template:
+        src: templates/patroni.j2
+        dest: /etc/patroni/conf.yml
+        owner: postgres
+        group: postgres
+        mode: '0644'
+    - name: Create sysd Patroni
+      ansible.builtin.template:
+        src: templates/sysd_patroni.j2
+        dest: /etc/systemd/system/patroni.service
+    - name: Systemd reload, enabled adn starting patroni.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: patroni.service
+        enabled: true
+        state: started
+```
+</details>
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+scope: patroni_cluster
+namespace: /patroni
+name: {{ patroni_node }}
+log:
+  level: INFO
+  dir: /data/log/patroni
+  file_size: 50000000
+  file_num: 10
+restapi:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+
+etcd:
+  hosts: {{ patroni_initial_cluster_string }}
+
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+
+  initdb:
+    - encoding: UTF8
+
+  pg_hba:
+    - host replication replicator 127.0.0.1/8 md5
+
+    {% for ip in patroni_replicator_ips %}
+
+    - host replication replicator {{ ip }}/32 md5
+
+    {% endfor %}
+    - host all all 0.0.0.0/0 md5
+
+  users:
+    admin:
+      password: 'password'
+      options:
+        - CREATEDB
+        - CREATEROLE
+
+postgresql:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  data_dir: /data/16
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    replication:
+      username: replicator
+      password: 'password'
+    superuser:
+      username: postgres
+      password: 'password'
+    rewind:
+      username: rewind_user
+      password: 'password'
+  parameters:
+    unix_socket_directories: '.'
+  create_replica_methods: ["basebackup"]
+  basebackup:
+    max-rate: 100M
+    checkpoint: fast
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+```
+</details>
+
+<img width="1809" height="915" alt="image" src="https://github.com/user-attachments/assets/32688b4d-1ba5-4a65-aa1e-05a71e0df0d8" />
+
