@@ -688,7 +688,7 @@ tee setup.yml << EOF
 </details>
 
 <details>
-<summary>setup.yml</summary>
+<summary>patroni.j2</summary>
   
 ```yml
 scope: patroni_cluster
@@ -771,5 +771,27 @@ tags:
 ```
 </details>
 
+
+Нужно отдельно выделить данный кусок:
+
+```yml
+  pg_hba:
+    - host replication replicator 127.0.0.1/8 md5
+
+    {% for ip in patroni_replicator_ips %}
+
+    - host replication replicator {{ ip }}/32 md5
+
+    {% endfor %}
+    - host all all 0.0.0.0/0 md5
+```
+
+Это цикл, который проходится по всем собранным адресам и добавляет их в строку.
+
+Проверим, что все получилось:
 <img width="1809" height="915" alt="image" src="https://github.com/user-attachments/assets/32688b4d-1ba5-4a65-aa1e-05a71e0df0d8" />
+<img width="1784" height="163" alt="image" src="https://github.com/user-attachments/assets/727341dd-9194-4134-9cb4-638846fecb9d" />
+
+Все работает и все взлетело! 
+
 
