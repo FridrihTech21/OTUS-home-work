@@ -863,6 +863,9 @@ host replication replicator 10.92.36.0/24 md5
 Схема включения Кластера-2 как репликатора Кластера состоит из:
 - Остановка всех нод
 - Правка конфига Patroni
+- Ручной тест `pg_basebackup`
+- Создание `/data/16/standby.signal`
+- Прописать `primary_conninfo`
 - Запуск ноды-лидера
 - Запуск всех остальных нод Кластера-2
 
@@ -920,7 +923,7 @@ sudo -u postgres /usr/lib/postgresql/16/bin/pg_basebackup \
   -h 10.92.35.112 \
   -p 5432 \
   -U replicator \
-  -D /tmp/test_backup \
+  -D /data/16 \
   -X stream \
   -P
 ```
@@ -928,3 +931,8 @@ sudo -u postgres /usr/lib/postgresql/16/bin/pg_basebackup \
 <img width="806" height="821" alt="image" src="https://github.com/user-attachments/assets/c669af97-32c5-4bca-bb60-a751d735e042" />
 
 Как видно, `pg_basebackup` работает!
+
+Создаем сигнал-файл `standby.signal`, чтобы нода знала, что она является `standby`. Bносим в `postgresql.auto.conf` инфо о коннекте к `primary`:
+
+<img width="821" height="201" alt="image" src="https://github.com/user-attachments/assets/4724f885-a815-466e-ac85-347897ed7458" />
+
