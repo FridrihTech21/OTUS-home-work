@@ -804,6 +804,11 @@ tags:
 Кластер-2:
 <img width="1793" height="337" alt="image" src="https://github.com/user-attachments/assets/d868e9cc-f651-4122-8fe4-917f752b12b0" />
 
+Проверим, что `wal_level = replica`, `max_replication_slots = 10`, `max_wal_senders = 10` и что наш пользователь `replicator` существет с ему присущим одноименном параметре:
+
+<img width="1428" height="608" alt="image" src="https://github.com/user-attachments/assets/6c0cce25-24da-444e-8ccd-9f7d07e2bfa1" />
+
+
 ## 5.1 Начало
 
 Создадим тестовую БД, наполним ее на стороне `primary` кластера.
@@ -816,7 +821,7 @@ psql -h 10.92.35.112 -d postgres -U postgres
 ```
 <img width="1682" height="225" alt="image" src="https://github.com/user-attachments/assets/240c90cd-9af4-4362-9117-7d94df60df25" />
 
-На кластере пубикации `cluter-1`(10.92.35.112) и подписки `cluter-2`(10.92.36.113) создадим тестовую БД:
+На кластере пубикации `cluter-1`(10.92.35.112) создадим тестовую БД:
 ```sql
 postgres=# CREATE USER test_log_repl WITH SUPERUSER;
 CREATE ROLE
@@ -827,7 +832,8 @@ ALTER ROLE
 postgres=#
 ```
 
-<img width="1673" height="368" alt="image" src="https://github.com/user-attachments/assets/62956428-dc30-46d7-89b5-d472d4e06aab" />
+<img width="806" height="361" alt="image" src="https://github.com/user-attachments/assets/02b04735-349c-445a-b8b4-817595696c8b" />
+
 
 Наполним тестовые таблицы данными:
 <img width="740" height="570" alt="image" src="https://github.com/user-attachments/assets/4af90a2b-21dc-4d16-b7f3-cb4889500518" />
