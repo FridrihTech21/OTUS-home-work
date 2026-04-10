@@ -933,6 +933,15 @@ sudo -u postgres /usr/lib/postgresql/16/bin/pg_basebackup \
 Как видно, `pg_basebackup` работает!
 
 Создаем сигнал-файл `standby.signal`, чтобы нода знала, что она является `standby`. Bносим в `postgresql.auto.conf` инфо о коннекте к `primary`:
+```
+sudo -u postgres tee -a /data/16/postgresql.auto.conf << EOF
+primary_conninfo = 'host=10.92.35.112 port=5432 user=replicator password=password application_name=patroni_node2'
+primary_slot_name = 'standby_cluster_2_slot'
+EOF
+
+sudo -u postgres touch /data/16/standby.signal
+```
+
 
 <img width="821" height="201" alt="image" src="https://github.com/user-attachments/assets/4724f885-a815-466e-ac85-347897ed7458" />
 
