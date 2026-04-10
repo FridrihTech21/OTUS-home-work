@@ -834,10 +834,18 @@ postgres=#
 
 <img width="806" height="361" alt="image" src="https://github.com/user-attachments/assets/02b04735-349c-445a-b8b4-817595696c8b" />
 
-
 Наполним тестовые таблицы данными:
 <img width="740" height="570" alt="image" src="https://github.com/user-attachments/assets/4af90a2b-21dc-4d16-b7f3-cb4889500518" />
 <img width="825" height="286" alt="image" src="https://github.com/user-attachments/assets/62d3f27c-a349-42a7-83a6-56f6f0251107" />
+
+Создадим слот репликации на Кластере-1:
+```
+SELECT pg_create_physical_replication_slot('standby_cluster_2_slot');        ---Создадим
+SELECT slot_name, slot_type, active, restart_lsn FROM pg_replication_slots;  ---Провверим
+```
+
+<img width="785" height="339" alt="image" src="https://github.com/user-attachments/assets/038d617d-216e-48cd-adef-c9e508dd221d" />
+
 
 
 
