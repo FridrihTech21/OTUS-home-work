@@ -811,6 +811,8 @@ tags:
 
 ## 5.1 Начало
 
+### 5.1.1 Основные настройки Кластера-1
+
 Создадим тестовую БД, наполним ее на стороне `primary` кластера.
 Создадим публикацию и подписку, на кластере `primary` будет расположена публикация, на кластере `secondary` будет расположена подписка.
 
@@ -841,14 +843,88 @@ postgres=#
 Создадим слот репликации на Кластере-1:
 ```
 SELECT pg_create_physical_replication_slot('standby_cluster_2_slot');        ---Создадим
-SELECT slot_name, slot_type, active, restart_lsn FROM pg_replication_slots;  ---Провверим
+SELECT slot_name, slot_type, active, restart_lsn FROM pg_replication_slots;  ---Проверим
 ```
 
 <img width="785" height="339" alt="image" src="https://github.com/user-attachments/assets/038d617d-216e-48cd-adef-c9e508dd221d" />
 
+Добавим следующий записи в `/data/16/pg_hba.conf` Кластера-1 через команду patronictl -c `/etc/patroni/conf.yml edit-config`:
+```
+host replication replicator 10.92.35.0/24 md5
+host replication replicator 10.92.36.0/24 md5
+```
 
+<img width="776" height="466" alt="image" src="https://github.com/user-attachments/assets/bfaa3fd8-b204-4487-80a7-a38e82204be2" />
 
+И перезапустим сллужбу Patroni Кластера-1: `sudo systemctl restart patroni.service`
 
+### 5.1.1 Основные настройки Кластера-2
 
+Схема включения Кластера-2 как репликатора Кластера состоит из:
+- Остановка всех нод
+- Правка конфига Patroni
+- Запуск ноды-лидера
+- Запуск всех остальных нод Кластера-2
 
+Останавливаем все ноды: 
+```
+sudo systemctl stop patroni.service
+```
 
+Правим конфиг `/etc/patroni/conf.yml`:
+```
+Было:
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+-----///-----
+
+Стало:
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    master_start_timeout: 30
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        wal_level: replica
+        max_replication_slots: 10
+        max_wal_senders: 10
+  standby_cluster:
+    host: "10.92.35.112,10.92.35.52,10.92.35.162"
+    port: 5432
+    primary_slot_name: "standby_cluster_2_slot"
+    create_replica_methods:
+      - basebackup
+```
+
+`primary_slot_name: "standby_cluster_2_slot"` - наш добавленный слот репликации на Кластере-1
+
+Запускаем ноду-лидера и проверим работу `pg_basebackup` c поднятой лидер-ноды Patroni Кластера-2:
+```
+sudo -u postgres /usr/lib/postgresql/16/bin/pg_basebackup \
+  -h 10.92.35.112 \
+  -p 5432 \
+  -U replicator \
+  -D /tmp/test_backup \
+  -X stream \
+  -P
+```
+
+<img width="806" height="821" alt="image" src="https://github.com/user-attachments/assets/c669af97-32c5-4bca-bb60-a751d735e042" />
+
+Как видно, `pg_basebackup` работает!
