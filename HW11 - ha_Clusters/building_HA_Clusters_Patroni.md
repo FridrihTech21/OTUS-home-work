@@ -862,16 +862,22 @@ host replication replicator 10.92.36.0/24 md5
 
 Схема включения Кластера-2 как репликатора Кластера состоит из:
 - Остановка всех нод
-- Правка конфига Patroni
-- Ручной тест `pg_basebackup`
-- Создание `/data/16/standby.signal`
-- Прописать `primary_conninfo`
+- Удаление информации в DCS ETCD-2 о Кластере-2
+- Удаление `PGADATA`
+- Правка конфига Patroni Кластера-2
 - Запуск ноды-лидера
 - Запуск всех остальных нод Кластера-2
 
 Останавливаем все ноды: 
 ```
 sudo systemctl stop patroni.service
+```
+
+Удаляем информацию о Кластере-2 в ETCD-2: 
+```
+ETCDCTL_API=2 etcdctl ls / --recursive                         ### Проверка
+ETCDCTL_API=2 etcdctl rm --recursive /patroni/patroni_cluster  ### Удаление
+ETCDCTL_API=2 etcdctl ls / --recursive                         ### Проверка
 ```
 
 Правим конфиг `/etc/patroni/conf.yml`:
@@ -907,41 +913,38 @@ bootstrap:
         wal_level: replica
         max_replication_slots: 10
         max_wal_senders: 10
-  standby_cluster:
-    host: "10.92.35.112,10.92.35.52,10.92.35.162"
-    port: 5432
-    primary_slot_name: "standby_cluster_2_slot"
-    create_replica_methods:
-      - basebackup
+    standby_cluster:
+      host: "10.92.35.112,10.92.35.52,10.92.35.162"
+      port: 5432
+      primary_slot_name: "standby_cluster_2_slot"
+      create_replica_methods:
+        - basebackup
+
+Добавляем в pg_hba: 
+host replication replicator 10.92.36.0/24
+host replication replicator 10.92.35.0/24
 ```
 
+На серверах Standby кластера в конфигурационном файле /etc/patroni/config.yml меняем значения scope, name, которые не должны совпадать с основным кластером. Заменим адреса всех серверов:
+```
+scope: patroni_cluster_standby                            # одинаковое значение на всех узлах Standby кластера
+name: patroni_node[num_of_host_patroni]_standby           # разное значение на всех узлах Standby кластера
+```
 `primary_slot_name: "standby_cluster_2_slot"` - наш добавленный слот репликации на Кластере-1
 
-Запускаем ноду-лидера и проверим работу `pg_basebackup` c поднятой лидер-ноды Patroni Кластера-2:
-```
-sudo -u postgres /usr/lib/postgresql/16/bin/pg_basebackup \
-  -h 10.92.35.112 \
-  -p 5432 \
-  -U replicator \
-  -D /data/16 \
-  -X stream \
-  -P
-```
+Запустим Patroni на Кластере-2. Запуск производи по каскадной схеме, первым на запуск идет лидер в Кластере-2, после успешной инциалиации запускаем все остальные ноды Patroni:
+Итоговая картина запуска стэндбай кластера Patroni, после его переконфигурации в таковой:
 
-<img width="806" height="821" alt="image" src="https://github.com/user-attachments/assets/c669af97-32c5-4bca-bb60-a751d735e042" />
+<img width="908" height="947" alt="image" src="https://github.com/user-attachments/assets/6497a8ed-366d-42fe-a13d-01fb3bad7ed8" />
 
-Как видно, `pg_basebackup` работает!
+- Первый этап инициализации: запущенный лидер имеет роль `Standby Leader`, его состояние в `streaming`
+- Второй этап инициализации: запущенные остальные ноды кластера преобретают статус от `stopped` и до `running`, имеют роль реплики, что видно на картике сверху
 
-Создаем сигнал-файл `standby.signal`, чтобы нода знала, что она является `standby`. Bносим в `postgresql.auto.conf` инфо о коннекте к `primary`:
-```
-sudo -u postgres tee -a /data/16/postgresql.auto.conf << EOF
-primary_conninfo = 'host=10.92.35.112 port=5432 user=replicator password=password application_name=patroni_node2'
-primary_slot_name = 'standby_cluster_2_slot'
-EOF
+Таким образом подтвердим, что репликация осуществляется: 
 
-sudo -u postgres touch /data/16/standby.signal
-```
+<img width="1682" height="696" alt="image" src="https://github.com/user-attachments/assets/472808c4-96be-4565-8bdc-735b09a16d47" />
 
+На рисунке видно, что созданная запись `37 | Yriy   | Gagarin` на `Primary` кластере Patroni реплецирована на `Standby` кластер Patroni.
+Осталось только "прикрутить" HAproxy и все готово!
 
-<img width="821" height="201" alt="image" src="https://github.com/user-attachments/assets/4724f885-a815-466e-ac85-347897ed7458" />
-
+## HAproxy
