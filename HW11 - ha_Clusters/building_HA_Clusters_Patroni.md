@@ -948,3 +948,12 @@ name: patroni_node[num_of_host_patroni]_standby           # разное зна�
 Осталось только "прикрутить" HAproxy и все готово!
 
 ## HAproxy
+
+Устанавливаем HAProxy через:
+
+```
+sudo apt-get update
+sudo apt-get install -y haproxy
+```
+
+ДОПИСАТЬ КОНФИГ, можно написать скрипт на python для переименования файлов c master_proxy.cfg в standby_proxy.cfg, после чего перезапуск haproxy. и все наоборот. скрипт должен опрашивать ноды primary кластера, если все ноды исчерпаютсЯ, то переключить файлы на Standby хост без автоматического возврата на Primary.
