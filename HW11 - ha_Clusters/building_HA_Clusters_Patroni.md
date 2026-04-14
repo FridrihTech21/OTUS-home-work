@@ -956,4 +956,58 @@ sudo apt-get update
 sudo apt-get install -y haproxy
 ```
 
-ДОПИСАТЬ КОНФИГ, можно написать скрипт на python для переименования файлов c master_proxy.cfg в standby_proxy.cfg, после чего перезапуск haproxy. и все наоборот. скрипт должен опрашивать ноды primary кластера, если все ноды исчерпаютсЯ, то переключить файлы на Standby хост без автоматического возврата на Primary.
+<details>
+<summary>/etc/haproxy/haproxy.cfg</summary>
+  
+```yml
+global
+   maxconn 100
+   log 127.0.0.1 local2
+
+defaults
+   log global
+   mode tcp
+   retries 2
+   timeout client 30m  
+   timeout connect 4s  
+   timeout server 30m  
+   timeout check 5s    
+
+listen stats
+   mode http
+   bind *:7000
+   stats enable        
+   stats uri /
+
+listen production      
+   bind *:5000
+   balance roundrobin
+   option httpchk GET/master
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-2.ru-central1.internal 10.92.35.112:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-3.ru-central1.internal 10.92.35.162:5432 maxconn 100 check port 8008
+         # STANBY ZONE
+   server tarasov-test-otus-cluter-2-node-1.ru-central1.internal 10.92.36.113:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008
+
+listen standby
+   bind *:5001
+   option httpchk GET/replica
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-2.ru-central1.internal 10.92.35.112:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-3.ru-central1.internal 10.92.35.162:5432 maxconn 100 check port 8008
+         # STANBY ZONE
+   server tarasov-test-otus-cluter-2-node-1.ru-central1.internal 10.92.36.113:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008
+```
+</details>
+
+
+
+можно написать скрипт на python для переименования файлов c master_proxy.cfg в standby_proxy.cfg, после чего перезапуск haproxy. и все наоборот. скрипт должен опрашивать ноды primary кластера, если все ноды исчерпаютсЯ, то переключить файлы на Standby хост без автоматического возврата на Primary.
