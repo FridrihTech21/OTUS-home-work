@@ -1125,4 +1125,13 @@ SELECT slot_name, slot_type, active, restart_lsn FROM pg_replication_slots;  ---
 <img width="820" height="193" alt="image" src="https://github.com/user-attachments/assets/448ac2b9-bf81-4eb1-b98a-9f6a113c2d04" />
 <img width="756" height="126" alt="image" src="https://github.com/user-attachments/assets/f77fd7a7-e746-4254-a0d8-fd2be2f0cb88" />
 
+В итоге полуаем Standby кластер из упавшего Primary:
+<img width="768" height="166" alt="image" src="https://github.com/user-attachments/assets/e96478b6-370b-466c-8b58-22edf060a089" />
+<img width="1901" height="737" alt="image" src="https://github.com/user-attachments/assets/a4403e42-9527-4e61-a24b-d8f0def13942" />
+<img width="1568" height="718" alt="image" src="https://github.com/user-attachments/assets/585c6880-1002-4ddb-a73a-af069ac23a45" />
 
+
+- `10.92.35.162` - итоговый Standby(Кластер-1)
+- `10.92.36.24` - итоговый Primary(Кластер-2)
+
+По последнему скриншоту можно понять, где находиться Standby, а где Primary. 
