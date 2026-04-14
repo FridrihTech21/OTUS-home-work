@@ -2,12 +2,19 @@
 Развертывание двух реплицируемых географически распределенных кластеров PostgreSQL в режиме высокой доступности и отказоустойчивости на базе Patroni и резервным копированием в MINIO S3
 
 `tarasov-test-otus-proj-balancer` - HAproxy, keepalived
+
 `tarasov-test-otus-proj-s3` - S3 MINIO
+
 `tarasov-test-otus-proj-cluster-1-node-1` - нода изначального Primary
+
 `tarasov-test-otus-proj-cluster-1-node-2` - нода изначального Primary
+
 `tarasov-test-otus-proj-cluster-1-node-3` - нода изначального Primary
+
 `tarasov-test-otus-proj-cluster-2-node-1` - нода изначального Standby
+
 `tarasov-test-otus-proj-cluster-2-node-2` - нода изначального Standby
+
 `tarasov-test-otus-proj-cluster-2-node-3` - нода изначального Standby
 
 1) Patroni(Primary & Standby)
