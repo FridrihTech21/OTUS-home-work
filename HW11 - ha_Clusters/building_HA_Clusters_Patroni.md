@@ -947,7 +947,7 @@ name: patroni_node[num_of_host_patroni]_standby           # разное зна�
 На рисунке видно, что созданная запись `37 | Yriy   | Gagarin` на `Primary` кластере Patroni реплецирована на `Standby` кластер Patroni.
 Осталось только "прикрутить" HAproxy и все готово!
 
-## HAproxy
+# 6. HAproxy
 
 Устанавливаем HAProxy через:
 
@@ -955,6 +955,11 @@ name: patroni_node[num_of_host_patroni]_standby           # разное зна�
 sudo apt-get update
 sudo apt-get install -y haproxy
 ```
+
+HAproxy перенаправит трафик в зависимости от его настроек:
+- `bind *:5000` - слушает весь трафик на запись;
+- `bind *:5001` - слушает весь трафик на чтение;
+- В пул серверов как на запись так и на чтение добавлены все хосты, т.к. при выходе из строя Primary кластера, HAproxy перенаправит трафик на Standby кластер.
 
 <details>
 <summary>/etc/haproxy/haproxy.cfg</summary>
@@ -968,46 +973,156 @@ defaults
    log global
    mode tcp
    retries 2
-   timeout client 30m  
-   timeout connect 4s  
-   timeout server 30m  
-   timeout check 5s    
+   timeout client 30m
+   timeout connect 4s
+   timeout server 30m
+   timeout check 5s
 
 listen stats
    mode http
    bind *:7000
-   stats enable        
+   stats enable
    stats uri /
 
-listen production      
+listen production
    bind *:5000
    balance roundrobin
    option httpchk GET/master
    http-check expect status 200
    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008 
    server tarasov-test-otus-cluter-1-node-2.ru-central1.internal 10.92.35.112:5432 maxconn 100 check port 8008
    server tarasov-test-otus-cluter-1-node-3.ru-central1.internal 10.92.35.162:5432 maxconn 100 check port 8008
          # STANBY ZONE
    server tarasov-test-otus-cluter-2-node-1.ru-central1.internal 10.92.36.113:5432 maxconn 100 check port 8008
-   server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008
-   server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008 
 
 listen standby
    bind *:5001
    option httpchk GET/replica
    http-check expect status 200
    default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
-   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-1-node-1.ru-central1.internal 10.92.35.52:5432 maxconn 100 check port 8008 
    server tarasov-test-otus-cluter-1-node-2.ru-central1.internal 10.92.35.112:5432 maxconn 100 check port 8008
    server tarasov-test-otus-cluter-1-node-3.ru-central1.internal 10.92.35.162:5432 maxconn 100 check port 8008
          # STANBY ZONE
+   server tarasov-test-otus-cluter-2-node-1.ru-central1.internal 10.92.36.113:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008 
+
+listen standby-leader
+   bind *:5000
+   option httpchk GET/standby-leader
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
    server tarasov-test-otus-cluter-2-node-1.ru-central1.internal 10.92.36.113:5432 maxconn 100 check port 8008
    server tarasov-test-otus-cluter-2-node-2.ru-central1.internal 10.92.36.50:5432 maxconn 100 check port 8008
    server tarasov-test-otus-cluter-2-node-3.ru-central1.internal 10.92.36.24:5432 maxconn 100 check port 8008
 ```
 </details>
 
+# 7. Демонтсрация работы
+
+План:
+1. Primary кластер выходит из строя(systemctl stop patroni.service);
+2. Standby должен стать Primary;
+3. HAproxy должен перенаправить трафик на Standby кластер.
+
+Убедимся, что кластера исправены:
+<img width="737" height="161" alt="image" src="https://github.com/user-attachments/assets/469df532-5368-4815-a365-3a9c00b066dd" />
+<img width="820" height="164" alt="image" src="https://github.com/user-attachments/assets/7e14fde7-be00-42e8-a3fd-6161c792c2d2" />
+
+Ключевые значения `Role`, `State`, `TL`, `Lag` в норме, идем дальше.
+
+Репликация активна:
+<img width="648" height="272" alt="image" src="https://github.com/user-attachments/assets/df006f00-86d6-4cf4-af54-aee042f76721" />
+
+Данные реплицированы:
+<img width="1670" height="730" alt="image" src="https://github.com/user-attachments/assets/43205f6f-29cc-4eaf-ae40-bf78392751d3" />
+
+HAproxy определяет все ноды по своим ролям:
+<img width="1917" height="813" alt="image" src="https://github.com/user-attachments/assets/5c0da889-f08c-4f19-b4f2-1c5add3ad9e5" />
+
+## 7.1 Остановка
+
+Кластер-1 остановлен:
+<img width="813" height="312" alt="image" src="https://github.com/user-attachments/assets/addb3a4b-2efd-4aba-82ef-2ede02d23c8f" />
+
+Пробуем подключаться через прокси: 
+<img width="1160" height="569" alt="image" src="https://github.com/user-attachments/assets/d177dafd-843b-40e6-9050-0871c970b1f8" />
+
+Результат ожидаем. Автопереключения не предусмотрено, поэтому переключим роль Standby кластера на Primary.
+
+## 7.2 Переключение
+
+Переключение состоит в изминении конфигурации Patroni:
+
+Очищаем поля, связанные с ролью Standby:
+```
+patronictl edit-config --force -s standby_cluster.host='' -s standby_cluster.port='' -s standby_cluster.create_replica_methods=''
+```
+<img width="1270" height="885" alt="image" src="https://github.com/user-attachments/assets/8acfff88-1a86-427c-b600-38b4327dae87" />
+
+## 7.3 Проверка
+
+Проверим подключение через клиент:
+<img width="1378" height="323" alt="image" src="https://github.com/user-attachments/assets/2165986e-d38e-4a6e-b257-96c172abea55" />
+
+А также, глянем что показывает HAproxy:
+<img width="1913" height="811" alt="image" src="https://github.com/user-attachments/assets/d3c37ea7-76ad-4701-9a1f-6867e639aaea" />
+
+- `tarasov-test-otus-cluter-2-node-3.ru-central1.internal` - лидер переключенного Stnadby кластера. Теперь он лидер Primary;
+- `standby-leader` - секция для отслеживания роли переключенного Standby. Отслеживает роль `Standby Leader`, т.к. кластер стал `Primary`, то и роль у него `Leader`;
+
+## 7.4 Обратное переключение
+
+Обратное переключение является более трудозатратным:
+- Восстановление хостов primary кластера;
+- Запуск упавшего Primary как Stnadby;
+- Создание репликации в сторону работающего Primary(бывш. Standby);
+- Осуществление репликации;
+- Переключение бывш. Standby в роль Standby;
+- Переключение бывш. Primary в роль Primary;
+- Проверка на Split-Brain.
+
+Но есть более щадящий путь как по трудозатратм, так и эффективнее в плане челевеческого фактора `Оставить новый Primary в его нынешней роли, а бывш. Primary назначить как Standby`:
+- Восстановление хостов бывш. primary кластера;
+- Создание слота репликации в сторону работающего Primary(бывш. Standby).
+- Реинициализация упавшего Primary как Stnadby;
 
 
-можно написать скрипт на python для переименования файлов c master_proxy.cfg в standby_proxy.cfg, после чего перезапуск haproxy. и все наоборот. скрипт должен опрашивать ноды primary кластера, если все ноды исчерпаютсЯ, то переключить файлы на Standby хост без автоматического возврата на Primary.
+### 7.4.1 Восстановление хостов бывш. primary кластера
+
+Запустим службу Patroni, и посмотрим статус кластеров:
+<img width="758" height="436" alt="image" src="https://github.com/user-attachments/assets/3117eaf3-e463-482a-b3d7-6965244cb028" />
+<img width="755" height="161" alt="image" src="https://github.com/user-attachments/assets/d1210108-3b3e-4374-a27f-846377742912" />
+
+На картинках видно, что репликация с кластера-2 на кластер-1 не выполняется:
+<img width="1575" height="556" alt="image" src="https://github.com/user-attachments/assets/178b1f9b-68db-48fa-bd5b-0e59169b204b" />
+
+Чтобы исправить ситуацию создадим слот репликации на кластере-2 и реинициализируем упавший кластер как Standby:
+
+<img width="618" height="360" alt="image" src="https://github.com/user-attachments/assets/cc77d6f6-4263-4f87-8f0a-adeab8741cbd" />
+
+```
+patronictl edit-config --force -s standby_cluster.host='10.92.36.113,10.92.36.50,10.92.36.24' -s standby_cluster.port='5432' -s standby_cluster.create_replica_methods='- basebackup'
+```
+<img width="821" height="693" alt="image" src="https://github.com/user-attachments/assets/32050181-dd98-4e50-a8e1-b304070d641d" />
+
+### 7.4.2 Создание слота репликации в сторону работающего Primary(бывш. Standby).
+
+Создаем слот репликации: 
+```
+SELECT pg_create_physical_replication_slot('standby_cluster_2_slot');        ---Создадим
+SELECT slot_name, slot_type, active, restart_lsn FROM pg_replication_slots;  ---Проверим
+```
+
+### 7.4.3 Реинициализация упавшего Primary как Stnadby
+
+Выполняем в точности все действия как в пункет [5.1.1 Основные настройки Кластера-2](https://github.com/FridrihTech21/OTUS-home-work/blob/main/HW11%20-%20ha_Clusters/building_HA_Clusters_Patroni.md#511-основные-настройки-кластера-2)
+
+<img width="820" height="193" alt="image" src="https://github.com/user-attachments/assets/448ac2b9-bf81-4eb1-b98a-9f6a113c2d04" />
+<img width="756" height="126" alt="image" src="https://github.com/user-attachments/assets/f77fd7a7-e746-4254-a0d8-fd2be2f0cb88" />
+
+
