@@ -562,7 +562,64 @@ postgres=#
 ```
 <img width="929" height="252" alt="image" src="https://github.com/user-attachments/assets/bcce5f46-d002-49c0-bffb-fe0376982cb9" />
 
+Наполнение выполним при помощи `pgbench`:
+<img width="898" height="269" alt="image" src="https://github.com/user-attachments/assets/219d0a5e-a4e2-4b3f-9fa4-e9fbc949e82b" />
 
+`-s 1000`, считай, генерим 100 000 000 записей! Было предпринято управленчиское решение прервать бенч, и увеличить ресурсы. 
+Но, при включении нод видим следующую картину: 
+
+<img width="866" height="581" alt="image" src="https://github.com/user-attachments/assets/33db6b85-98a1-46fe-98dd-a472df47f994" />
+
+В чем же дело? Идем смотреть оги Patroni:
+
+```
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/patroni/venv/lib/python3.12/site-packages/patroni/dcs/etcd.py", line 281, in _do_http_request
+    response = request_executor(method, base_uri + path, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/patroni/venv/lib/python3.12/site-packages/urllib3/_request_methods.py", line 143, in request
+    return self.request_encode_body(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/patroni/venv/lib/python3.12/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
+    return self.urlopen(method, url, **extra_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/patroni/venv/lib/python3.12/site-packages/urllib3/poolmanager.py", line 457, in urlopen
+    response = conn.urlopen(method, u.request_uri, **kw)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/patroni/venv/lib/python3.12/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+              ^^^^^^^^^^^^^^^^^^
+  File "/opt/patroni/venv/lib/python3.12/site-packages/urllib3/util/retry.py", line 535, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node2_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host='tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal', port=2379): Read timed out. (read timeout=3.333215634333404)"))
+```
+
+Patroni пробует достучаться до ETCD-3 `2026-04-15 12:44:15,886 ERROR: Request to server http://tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal:2379 failed: MaxRetryError('HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node1_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Read timed out. (read timeout=3.3327407823332655)"))')`
+```
+Т.к. ETCD-3 запускался последним, то и time out понятно из-за чего.
+
+Интереснее ситуация обстоит на ETCD-2:
+```
+Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: repairing /var/lib/etcd/member/wal/0000000000000000-0000000000000000.wal
+Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: repaired WAL error (unexpected EOF)
+Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 0000000000000000-0000000000000000.wal.broken in wal
+```
+
+Повредился WAL, произошло это из-за того, что репликация была еще не завершена, а машины уже потушили. Соответсвенно, при включении, ETCD-2 увидел "битый" файл WAL, пробует до репелецировать не достающий WAL. Это нагружает систему, в которой состоит Patroni+ETCD. Делаем вывод, что проблема в производительности, ETCD чувствителен к аппаратным требованиям. Т.к. это тестовый кластер, то ситауция приемлема, но для продуктивного кластера не допускается такая конфигурация по программному апаратному комплексу. Через не продолжительное время, статус кластера Paroni восстановился балгодаря как раз ETCD, который разложил все данные по полочкам, просто для этого требуется время.
+
+<img width="924" height="154" alt="image" src="https://github.com/user-attachments/assets/72e85c92-6a22-48da-92c3-6fa60e05c98e" />
+
+Итог:
+- Кластер восстановился самостоятельно благодаря надежности etcd
+- Patroni смог восстановить координацию после стабилизации etcd
+- Система показала устойчивость к временным проблемам
+- Для продакшена использовать отдельные мощные серверы для etcd
+- Настроить мониторинг производительности
+
+Идем дальше, пробуем наполнить БД с меньшим количеством `-s`:
 
 
 ## 2.2 Настройка Standby
