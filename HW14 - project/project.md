@@ -66,9 +66,8 @@ EOF
 ```
 </details>
 
-## Добавить скрин с остальными хостами
+<img width="1379" height="714" alt="image" src="https://github.com/user-attachments/assets/89a93e5e-4968-45c8-b6fa-46e19fc0b0bf" />
 
-<img width="1684" height="465" alt="image" src="https://github.com/user-attachments/assets/c7de4ed8-5a7a-4bea-9b16-fd51f953b6d4" />
 
 Теперь добавим playbook, в котором обновим пакеты на целевых машинах:
 
