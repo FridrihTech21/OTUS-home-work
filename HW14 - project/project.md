@@ -548,6 +548,23 @@ Patroni установлен.
 
 ## 2.1 Настройка Primary
 
+Создадим тестовую БД, наполним ее на стороне primary кластера. Создадим слот репликации.
+
+Cluster-1:
+```
+postgres=# CREATE USER test WITH SUPERUSER;
+CREATE ROLE
+postgres=# CREATE DATABASE test_db WITH OWNER=test;
+CREATE DATABASE
+postgres=# ALTER USER test WITH PASSWORD 'qwerty@123';
+ALTER ROLE 
+postgres=#
+```
+<img width="929" height="252" alt="image" src="https://github.com/user-attachments/assets/bcce5f46-d002-49c0-bffb-fe0376982cb9" />
+
+
+
+
 ## 2.2 Настройка Standby
 
 ## 2.3 Проверка репликации  
