@@ -670,7 +670,10 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 Поздравляю! Мы добавили ноду ETCD-2!
 
 Далее нужно добавить ноду Patroni к существующему кластеру. 
-
+- Установить PostgreSQL:
+  <img width="587" height="65" alt="image" src="https://github.com/user-attachments/assets/f32babb7-4d18-4cb7-b4d8-deb65490a70e" />
+- Установить Patroni
+ 
 
 ## 2.2 Настройка Standby
 
