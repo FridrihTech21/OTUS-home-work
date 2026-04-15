@@ -315,7 +315,234 @@ EOF
 
 ## 1.3 Установка Patroni
 
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+sudo tee setup.yml << EOF
+---
+- name: Install and Configure Patroni cluster
+  hosts: servers
+  become: yes
+  gather_facts: yes
+  vars:
+    patroni_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    patroni_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | map('regex_replace', '^(.*?)(:[0-9]+)?$', '\1:2379')
+        | join(',')
+      }}
+    patroni_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    patroni_names_map: ['patroni_node1', 'patroni_node2', 'patroni_node3']
+    patroni_node: "{{ patroni_names_map[patroni_node_index] }}"
+    patroni_replicator_ips: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_default_ipv4', 'address'])
+        | select('defined')
+        | list
+      }}
 
+  tasks:
+    - name: Get service facts from host
+      ansible.builtin.service_facts:
+    - name: Systemd patroni.service stop if exist
+      ansible.builtin.systemd_service:
+        name: patroni.service
+        state: stopped
+      when: "'patroni.service' in ansible_facts.services"
+      ignore_errors: true
+    - name: Install python3.12-venv
+      ansible.builtin.apt:
+        name: python3.12-venv
+        update_cache: yes
+        state: present
+    - name: Install acl package for proper file permissions when becoming unprivileged user
+      ansible.builtin.apt:
+        name: acl
+        update_cache: yes
+        state: present
+    - name: Create a directory /opt/patroni if it does not exist
+      ansible.builtin.file:
+        path: /opt/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Creating virtual environment
+      ansible.builtin.command:
+        cmd: python3 -m venv /opt/patroni/venv
+      become: yes
+      become_user: postgres
+    - name: Install patroni[etcd3] into virtual environment, inheriting globally installed modules
+      ansible.builtin.pip:
+        name: patroni[etcd3]
+        virtualenv: /opt/patroni/venv
+        virtualenv_site_packages: yes
+    - name: Install python3-psycopg2 into virtual environment, inheriting globally installed modules
+      ansible.builtin.pip:
+        name: psycopg2-binary
+        virtualenv: /opt/patroni/venv
+        virtualenv_site_packages: yes
+    - name: Create PGDATA directory /data/16 if it does not exist
+      ansible.builtin.file:
+        path: /data/16
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0700'
+    - name: Create log directory /data/log/patroni if it does not exist
+      ansible.builtin.file:
+        path: /data/log/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Create etc patroni directory /etc/patroni if it does not exist
+      ansible.builtin.file:
+        path: /etc/patroni
+        state: directory
+        owner: postgres
+        group: postgres
+        mode: '0755'
+    - name: Copy Patroni configuration template to /etc/patroni/conf.yml
+      ansible.builtin.template:
+        src: templates/patroni.j2
+        dest: /etc/patroni/conf.yml
+        owner: postgres
+        group: postgres
+        mode: '0644'
+    - name: Create sysd Patroni
+      ansible.builtin.template:
+        src: templates/sysd_patroni.j2
+        dest: /etc/systemd/system/patroni.service
+    - name: Systemd reload, enabled adn starting patroni.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: patroni.service
+        enabled: true
+        state: started
+EOF
+```
+</details>
+
+<details>
+<summary>patroni.j2</summary>
+  
+```yml
+sudo tee templates/patroni.j2 << EOF
+scope: patroni_cluster_1
+namespace: /patroni_1
+name: {{ patroni_node }}_cluster_1
+log:
+  level: INFO
+  dir: /data/log/patroni
+  file_size: 50000000
+  file_num: 10
+restapi:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+
+etcd:
+  hosts: {{ patroni_initial_cluster_string }}
+
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+
+  initdb:
+    - encoding: UTF8
+
+  pg_hba:
+    - host replication replicator 127.0.0.1/8 md5
+
+    {% for ip in patroni_replicator_ips %}
+
+    - host replication replicator {{ ip }}/32 md5
+
+    {% endfor %}
+
+    - host all all 0.0.0.0/0 md5
+
+  users:
+    admin:
+      password: 'password'
+      options:
+        - CREATEDB
+        - CREATEROLE
+
+postgresql:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  data_dir: /data/16
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    replication:
+      username: replicator
+      password: 'password'
+    superuser:
+      username: postgres
+      password: 'password'
+    rewind:
+      username: rewind_user
+      password: 'password'
+  parameters:
+    unix_socket_directories: '.'
+  create_replica_methods: ["basebackup"]
+  basebackup:
+    max-rate: 100M
+    checkpoint: fast
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+EOF
+```
+</details>
+
+<details>
+<summary>sysd_patroni.j2</summary>
+  
+```yml
+sudo tee templates/sysd_patroni.j2 << EOF
+[Unit]
+Description=High availability PostgreSQL Cluster
+After=syslog.target network.target
+
+[Service]
+Type=simple:
+User=postgres
+Group=postgres
+ExecStart=/opt/patroni/venv/bin/patroni /etc/patroni/conf.yml
+KillMode=process
+TimeoutSec=30
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+</details>
+
+<img width="1091" height="180" alt="image" src="https://github.com/user-attachments/assets/9d3af9df-fee6-4173-a9d4-3529395ff613" />
+<img width="1097" height="178" alt="image" src="https://github.com/user-attachments/assets/a51ecd3b-70f5-406e-80e2-32e7587a5f6d" />
+
+Patroni установлен.
 
 # 2 Репликация(Primary & Standby)
 
