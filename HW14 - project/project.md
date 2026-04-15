@@ -101,6 +101,15 @@ EOF
 Установка проходит при помощи Ansible:
 
 <details>
+<summary>inventory.ini</summary>
+  
+```yml
+[server_S3]
+tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+```
+</details>
+
+<details>
 <summary>setup.yml</summary>
   
 ```yml
@@ -217,15 +226,6 @@ tee setup.yml << EOF
         state: started
         enabled: true
 EOF
-```
-</details>
-
-<details>
-<summary>setup.yml</summary>
-  
-```yml
-[server_S3]
-tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 ```
 </details>
 
