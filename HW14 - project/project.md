@@ -680,6 +680,8 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 
 ### С божьей помощью продолжим =)
 
+Дропнем прошлую БД и выполним все заново, в этот раз выставим `-s 100`:
+<img width="982" height="544" alt="image" src="https://github.com/user-attachments/assets/f4b176e5-7b16-424d-817d-a4baf6b71a74" />
 
 
 ## 2.2 Настройка Standby
