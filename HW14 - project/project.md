@@ -220,6 +220,15 @@ EOF
 ```
 </details>
 
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+[server_S3]
+tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+```
+</details>
+
 <img width="1895" height="998" alt="image" src="https://github.com/user-attachments/assets/7b14a5cc-262b-47ff-bfeb-7c4d3a91e4ac" />
 
 4.2) Настройка
