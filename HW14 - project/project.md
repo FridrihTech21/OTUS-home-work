@@ -25,20 +25,27 @@ sudo apt update && sudo apt install software-properties-common && sudo add-apt-r
 
 Настроим сетевую свзяность и SSH:
 ```
-sudo tee -a /etc/hosts <<EOF
-10.92.5.83 tarasov-test-otus-proj-balancer tarasov-test-otus-proj-balancer.ru-central1.internal
+sudo tee -a /etc/hosts << EOF
+10.92.36.9 tarasov-test-otus-proj-cluster-1-node-1 tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal
+10.92.36.33 tarasov-test-otus-proj-cluster-1-node-2 tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal
+10.92.36.81 tarasov-test-otus-proj-cluster-1-node-3 tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal
+10.92.35.60 tarasov-test-otus-proj-cluster-2-node-1 tarasov-test-otus-proj-cluster-2-node-1.ru-central1.internal
+10.92.35.117 tarasov-test-otus-proj-cluster-2-node-2 tarasov-test-otus-proj-cluster-2-node-2.ru-central1.internal
+10.92.35.12 tarasov-test-otus-proj-cluster-2-node-3 tarasov-test-otus-proj-cluster-2-node-3.ru-central1.internal
 10.92.5.173 tarasov-test-otus-proj-s3 tarasov-test-otus-proj-s3.ru-central1.internal
-
-ВПИСАТЬ ОСТАЛЬНЫЕ ХОСТs
-
+10.92.5.83 tarasov-test-otus-proj-balancer tarasov-test-otus-proj-balancer.ru-central1.internal
 EOF
 
-sudo tee -a .ssh/authorized_keys <<EOF
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe9OR8QM0BUoSrEpsf0syR+6f7Ll0+hkYg2E3FqI00i fvtarasov@tarasov-test-otus-proj-s3
+
+tee -a ~/.ssh/authorized_keys << EOF
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7ZdqiyXBzEHM15yXSSd+PQp0+PzDBk7SZ+zpNCCWRE fvtarasov@tarasov-test-otus-proj-balancer
-
-ВПИСАТЬ ОСТАЛЬНЫЕ ССШ ХОСТОВ
-
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKBrpWnLATvYhvYI204+LojR/PHBKmUbJGkQWbcZgCFh fvtarasov@tarasov-test-otus-proj-cluster-1-node-1
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAxJ7KQCgGo5fj7CI7KrlGcDwiY48KAhFxj8eVcs/4ky fvtarasov@tarasov-test-otus-proj-cluster-1-node-2
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBPuthMgI36dY6TkRa+Y4jdd4yJJz1DXIhaxKOY10gfi fvtarasov@tarasov-test-otus-proj-cluster-1-node-3
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKEbhoiioC+5GlUiXZtf6Ra6nCfwqdDZJ41w5G5ONozE fvtarasov@tarasov-test-otus-proj-cluster-2-node-1
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIX0yy3WI4hK2ebTrnIokcOpxDOfInSh1vd3WMO7BKMH fvtarasov@tarasov-test-otus-proj-cluster-2-node-2
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH5qfXnm91mi4qe1HMinJyhtRBEPzVofpc2JL4vpkXXs fvtarasov@tarasov-test-otus-proj-cluster-2-node-3
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILe9OR8QM0BUoSrEpsf0syR+6f7Ll0+hkYg2E3FqI00i fvtarasov@tarasov-test-otus-proj-s3
 EOF
 ```
 
@@ -52,11 +59,9 @@ EOF
 ```yml
 tee inventory.ini << EOF
 [servers]
-tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
-tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
-
-Добавить остальные хосты
-
+tarasov-test-otus-proj-cluster-[num_of_cluster]-node-[num_node].ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-proj-cluster-[num_of_cluster]-node-[num_node].ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-proj-cluster-[num_of_cluster]-node-[num_node].ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 EOF
 ```
 </details>
