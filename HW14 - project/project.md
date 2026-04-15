@@ -1,5 +1,4 @@
-ТЕМА: 
-Развертывание двух реплицируемых географически распределенных кластеров PostgreSQL в режиме высокой доступности и отказоустойчивости на базе Patroni и резервным копированием в MINIO S3
+# ТЕМА: Развертывание двух реплицируемых географически распределенных кластеров PostgreSQL в режиме высокой доступности и отказоустойчивости на базе Patroni и резервным копированием в MINIO S3
 
 `tarasov-test-otus-proj-balancer` - HAproxy, keepalived
 
@@ -75,7 +74,7 @@ EOF
 <summary>setup.yml</summary>
   
 ```yml
-tee -a setup.yml << EOF
+tee -a update_packs.yml << EOF
 ---
 - name:
   hosts: servers
@@ -88,17 +87,249 @@ EOF
 ```
 </details>
 
-<img width="1691" height="481" alt="image" src="https://github.com/user-attachments/assets/1fe2e458-6178-4b1b-8872-819257bf24c5" />
+<img width="1379" height="645" alt="image" src="https://github.com/user-attachments/assets/54a4aeeb-8dee-4390-8416-abc3359e8084" />
 
-
-
-1) Patroni(Primary & Standby)
+Далее будем идти по плану:
+1) Установка кластеров Patroni
+   1.1) Установка ETCD
+   1.2) Установка PostgreSQL
+   1.3) Установка Patroni
 2) Репликация(Primary & Standby)
-3) Keepalived & HAproxy
-4) pgBackRest & S3 MINIO
+   2.1) Настройка Primary
+   2.2) Настройка Standby
+   2.3) Проверка репликации  
+4) Keepalived & HAproxy
+5) pgBackRest & S3 MINIO
+
+# 1. Установка кластеров Patroni
+
+Установка будет проведена средствами Ansible. 
+
+## 1.1 Установка ETCD
+
+Дерево каталога:
+<img width="777" height="182" alt="image" src="https://github.com/user-attachments/assets/02409b6b-3d40-4d6b-b876-5eee584ecece" />
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+tee setup.yml << EOF
+---
+- name: Configure etcd cluster
+  hosts: servers 
+  become: yes
+  gather_facts: yes 
+  vars:
+    etcd_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    etcd_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | zip(['etcd1', 'etcd2', 'etcd3'])
+        | map('reverse')
+        | map('join', '=')
+        | map('regex_replace', '^(.*)=(.*)$', '\\1=http://\\2:2380')
+        | join(',')
+      }}
+    etcd_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    etcd_names_map: ['etcd1', 'etcd2', 'etcd3']
+    etcd_node_name: "{{ etcd_names_map[etcd_node_index] }}"
+  tasks:
+    - name: Change cloud.cfg
+      become: true
+      ansible.builtin.replace:
+        path: /etc/cloud/cloud.cfg
+        regexp: '- update_etc_hosts'
+        replace: '#  - update_etc_hosts'
+    - name: Install etcd-server
+      ansible.builtin.apt:
+        name: etcd-server
+        update_cache: yes
+        state: present 
+    - name: Install etcd-client
+      ansible.builtin.apt:
+        name: etcd-client
+        update_cache: yes
+        state: present 
+    - name: Ensure /etc/default directory exists
+      ansible.builtin.file:
+        path: /etc/default
+        state: directory
+        mode: '0755'
+    - name: Copy Etcd configuration template to /etc/default/etcd
+      ansible.builtin.template:
+        src: etcd.j2 
+        dest: /etc/default/etcd
+        owner: fvtarasov
+        group: fvtarasov
+        mode: '0644' 
+    - name: Restart Etcd service
+      ansible.builtin.systemd_service:
+        name: etcd.service
+        state: restarted
+EOF
+```
+</details>
+
+<details>
+<summary>inventory.ini</summary>
+  
+```yml
+tee -a inventory.ini << EOF
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Updating lists packages
+      ansible.builtin.apt:
+        update_cache: yes
+EOF
+```
+</details>
+
+<details>
+<summary>etcd.j2</summary>
+  
+```yml
+tee -a etcd.j2 << EOF
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Updating lists packages
+      ansible.builtin.apt:
+        update_cache: yes
+EOF
+```
+</details>
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+tee -a update_packs.yml << EOF
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Updating lists packages
+      ansible.builtin.apt:
+        update_cache: yes
+EOF
+```
+</details>
+
+<img width="1765" height="224" alt="image" src="https://github.com/user-attachments/assets/7100515b-9801-4146-9458-8d15a2938faf" />
+
+ETCD установлен.
+
+## 1.2 Установка PostgreSQL
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+
+tee setup.yml << EOF
+---
+- name: Configure etcd cluster
+  hosts: servers
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Install python3-pip
+      ansible.builtin.apt:
+        name: python3-pip
+        update_cache: yes
+        state: present
+    - name: Install python3-psycopg2
+      ansible.builtin.apt:
+        name: python3-psycopg2
+        update_cache: yes
+        state: present       
+    - name: Install postgresql-server
+      ansible.builtin.apt:
+        name: postgresql
+        update_cache: yes
+        state: present
+    - name: Grant all all from network 0.0.0.0/0 access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: host
+        users: all
+        source: 0.0.0.0/0
+        databases: all
+        method: scram-sha-256
+    - name: Grant all postgres from local access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: local
+        users: postgres
+        databases: all
+        method: trust
+    - name: Grant replicator replicator from host access 
+      community.postgresql.postgresql_pg_hba:
+        dest: /etc/postgresql/16/main/pg_hba.conf
+        contype: host
+        users: replicator
+        source: 0.0.0.0/0
+        databases: replicator
+        method: scram-sha-256
+    - name: Replace a listen_addresses = '*'
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/16/main/postgresql.conf
+        search_string: '#listen_addresses' 
+        line: listen_addresses = '*'  
+    - name: Restart PostgreSQL service
+      ansible.builtin.systemd_service:
+        name: postgresql.service
+        state: restarted    
+    - name: Delete if exist user replicator
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: drop user if exists replicator
+    - name: Create user replicator
+      community.postgresql.postgresql_query:
+        login_db: postgres
+        query: create user replicator login encrypted password 'password'
+    - name: Stopped PostgreSQL service
+      ansible.builtin.systemd_service:
+        name: postgresql.service
+        state: stopped   
+    - name: Recursively remove directory
+      ansible.builtin.file:
+        path: /var/lib/postgresql/16/main/
+        state: absent
+      become: yes
+EOF
+```
+</details>
+
+<img width="1771" height="1008" alt="image" src="https://github.com/user-attachments/assets/6394e908-424b-4dac-887b-79d17373807b" />
+<img width="800" height="181" alt="image" src="https://github.com/user-attachments/assets/115d2c07-14de-4014-84a3-f202af6a5f11" />
+
+## 1.3 Установка Patroni
 
 
-4) Резервное копирование в S3 MINIO
+
+# 2 Репликация(Primary & Standby)
+
+## 2.1 Настройка Primary
+
+## 2.2 Настройка Standby
+
+## 2.3 Проверка репликации  
+
+
+
+
+
+# 4) Резервное копирование в S3 MINIO
 
 4.1) Установка 
 
