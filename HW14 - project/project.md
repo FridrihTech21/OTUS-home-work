@@ -672,8 +672,11 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 Далее нужно добавить ноду Patroni к существующему кластеру. 
 - Установить PostgreSQL:
   <img width="587" height="65" alt="image" src="https://github.com/user-attachments/assets/f32babb7-4d18-4cb7-b4d8-deb65490a70e" />
-- Установить Patroni
- 
+- Установить Patroni(изменить pg_hba.conf на работающих нодах для разрешения репликации с лидера на новую ноду, запустить Ansible YML):
+<img width="1786" height="643" alt="image" src="https://github.com/user-attachments/assets/ef2d1b07-a3a0-4e25-a1d8-958eb4ef84d7" />
+<img width="1102" height="313" alt="image" src="https://github.com/user-attachments/assets/97538d9b-08fb-43fd-83d6-963f45bdc0ec" />
+
+ Поздравляем! Мы смогли восстановить целостность кластера!
 
 ## 2.2 Настройка Standby
 
