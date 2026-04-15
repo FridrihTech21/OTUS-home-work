@@ -676,7 +676,11 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 <img width="1786" height="643" alt="image" src="https://github.com/user-attachments/assets/ef2d1b07-a3a0-4e25-a1d8-958eb4ef84d7" />
 <img width="1102" height="313" alt="image" src="https://github.com/user-attachments/assets/97538d9b-08fb-43fd-83d6-963f45bdc0ec" />
 
- Поздравляем! Мы смогли восстановить целостность кластера!
+Поздравляем! Мы смогли восстановить целостность кластера!
+
+### С божьей помощью продолжим =)
+
+
 
 ## 2.2 Настройка Standby
 
