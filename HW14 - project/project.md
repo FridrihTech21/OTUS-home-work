@@ -620,8 +620,10 @@ Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 
 
 Идем дальше, пробуем наполнить БД с меньшим количеством `-s 1000`:
 <img width="1555" height="573" alt="image" src="https://github.com/user-attachments/assets/54a801d9-f5b4-4bd2-9173-58c9ec464bdc" />
+
 И снова все падает, но уже по утилизации места на диске. Нужно увелисить место на диске. 
 При заходе по SSH ошибка:
+
 <img width="540" height="63" alt="image" src="https://github.com/user-attachments/assets/c9e0b3ac-95f3-4442-9aa4-87706bc4cdca" />
 Судя по всему перетерся SSH-ключ на cluste-1-node-2 при расширении простаранства на диске... Ладно, исправим. 
 Для этого:
@@ -633,6 +635,7 @@ Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 
 <img width="1637" height="152" alt="image" src="https://github.com/user-attachments/assets/75435e9a-4e50-49a8-a9fc-55fb779fdda8" />
 
 После удаление ноды:
+
 <img width="1718" height="211" alt="image" src="https://github.com/user-attachments/assets/788c0372-8ca2-4991-9399-47f2e03977d7" />
 ```
 Failed to get the status of endpoint http://tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal:2379 (context deadline exceeded)
@@ -640,8 +643,33 @@ Failed to get the status of endpoint http://tarasov-test-otus-proj-cluster-1-nod
 
 Удалим ноду ETCD-2 из кластера:
 <img width="1637" height="337" alt="image" src="https://github.com/user-attachments/assets/b13b89ff-b795-4de1-aec2-1dd7d1d366d7" />
+<img width="1651" height="336" alt="image" src="https://github.com/user-attachments/assets/02cf3fb1-26d8-434b-9823-4bd87bff58ea" />
+
 
 Далее требуется завести новый хост, и поставить на него ETCD, при помощи Ansible.
+После установки всех зависимостей ETCD на ETCD-2 демон валится с ошибкой на том, что ETCD-2 пытается создань новый кластер ETCD:
+
+```
+Apr 15 18:56:35 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: starting server... [version: 3.4.30, cluster version: to_be_decided]
+Apr 15 18:56:35 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: 8e9e05c52164694d as single-node; fast-forwarding 9 ticks (election ticks 10)
+Apr 15 18:56:35 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: added member 8e9e05c52164694d [http://localhost:2380] to cluster cdf818194e3a8c32
+Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/15 18:56:36 INFO: 8e9e05c52164694d is starting a new election at term 1
+Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/15 18:56:36 INFO: 8e9e05c52164694d became candidate at term 2
+Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/15 18:56:36 INFO: 8e9e05c52164694d received MsgVoteResp from 8e9e05c52164694d at term 2
+```
+
+Глянем в конфиг, и выясним, что ETCD инициализирует новый кластер, исправим это:
+<img width="1299" height="95" alt="image" src="https://github.com/user-attachments/assets/a43f4532-2459-4c35-a084-a2c62a99f979" />
+
+Далее добавим в кластер наш ETCD-2:
+<img width="1795" height="310" alt="image" src="https://github.com/user-attachments/assets/d9b9e21c-78ff-4d27-a324-6ab3034e698e" />
+
+Далее для запуска нужно перечитать sys.d, удалить старые данные в ETCD-2:  и попробовать запустить ETCD-2:
+<img width="1520" height="611" alt="image" src="https://github.com/user-attachments/assets/73aa3a4c-08dc-4c05-a5af-1ff7c8558ece" />
+
+Поздравляю! Мы добавили ноду ETCD-2!
+
+Далее нужно добавить ноду Patroni к существующему кластеру. 
 
 
 ## 2.2 Настройка Standby
