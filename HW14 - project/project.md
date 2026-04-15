@@ -598,7 +598,6 @@ urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='tarasov-test-otus-pro
 ```
 
 Patroni пробует достучаться до ETCD-3 `2026-04-15 12:44:15,886 ERROR: Request to server http://tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal:2379 failed: MaxRetryError('HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node1_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Read timed out. (read timeout=3.3327407823332655)"))')`
-```
 Т.к. ETCD-3 запускался последним, то и time out понятно из-за чего.
 
 Интереснее ситуация обстоит на ETCD-2:
@@ -621,7 +620,29 @@ Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 
 
 Идем дальше, пробуем наполнить БД с меньшим количеством `-s 1000`:
 <img width="1555" height="573" alt="image" src="https://github.com/user-attachments/assets/54a801d9-f5b4-4bd2-9173-58c9ec464bdc" />
-И снова все падает, но уже по утилизации места на диске. Нужно увелисить место на диске
+И снова все падает, но уже по утилизации места на диске. Нужно увелисить место на диске. 
+При заходе по SSH ошибка:
+<img width="540" height="63" alt="image" src="https://github.com/user-attachments/assets/c9e0b3ac-95f3-4442-9aa4-87706bc4cdca" />
+Судя по всему перетерся SSH-ключ на cluste-1-node-2 при расширении простаранства на диске... Ладно, исправим. 
+Для этого:
+- Удалить из кластера ETCD проблемную ноду
+- Удалить из кластера Patroni проблемную ноду
+- Установить ETCD на новую ноду
+- Установить Patroni на новую ноду
+
+<img width="1637" height="152" alt="image" src="https://github.com/user-attachments/assets/75435e9a-4e50-49a8-a9fc-55fb779fdda8" />
+
+После удаление ноды:
+<img width="1718" height="211" alt="image" src="https://github.com/user-attachments/assets/788c0372-8ca2-4991-9399-47f2e03977d7" />
+```
+Failed to get the status of endpoint http://tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal:2379 (context deadline exceeded)
+```
+
+Удалим ноду ETCD-2 из кластера:
+<img width="1637" height="337" alt="image" src="https://github.com/user-attachments/assets/b13b89ff-b795-4de1-aec2-1dd7d1d366d7" />
+
+Далее требуется завести новый хост, и поставить на него ETCD, при помощи Ansible.
+
 
 ## 2.2 Настройка Standby
 
