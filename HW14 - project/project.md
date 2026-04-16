@@ -691,18 +691,25 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 
 Добавим следующие строки в pg_hba.conf:
 ```
-local   replication     all                                     trust
-host    replication     all             127.0.0.1/32            trust
-host    replication     all             ::1/128                 trust
-host replication replicator 127.0.0.1/8 md5
-host replication replicator 10.92.36.9/32 md5
-host replication replicator 10.92.36.64/32 md5
-host replication replicator 10.92.36.81/32 md5
-host replication replicator 10.92.35.0/24 md5
-host replication replicator 10.92.36.0/24 md5
+  - local   replication     all                                     trust
+  - host    replication     all             127.0.0.1/32            trust
+  - host    replication     all             ::1/128                 trust
+  - host replication replicator 127.0.0.1/8 md5        # 
+  - host replication replicator 10.92.35.60/32 md5     # Кластер-2
+  - host replication replicator 10.92.35.117/32 md5    # Кластер-2
+  - host replication replicator 10.92.35.12/32 md5     # Кластер-2
+  - host replication replicator 10.92.35.0/24 md5      # Все хосты Кластер-2
+  - host replication replicator 10.92.36.0/24 md5      # Все хосты с Кластер-1
+  - host all         all        10.92.36.0/24 md5
+  - host all         all        10.92.35.0/24 md5
+  - host all         all        10.92.5.0/24 md5      # Хосты балансера и S3
 ```
 
+Запуск primary ноды Standby кластера:
 <img width="881" height="688" alt="image" src="https://github.com/user-attachments/assets/6f479d76-668b-4435-a2c8-30147773fd57" />
+
+После старта реплик Standby кластера:
+<img width="1007" height="153" alt="image" src="https://github.com/user-attachments/assets/4bec65ac-83f7-418e-8be7-eb4a029e1911" />
 
 
 ## 2.2 Настройка Standby
