@@ -637,6 +637,7 @@ Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 
 После удаление ноды:
 
 <img width="1718" height="211" alt="image" src="https://github.com/user-attachments/assets/788c0372-8ca2-4991-9399-47f2e03977d7" />
+
 ```
 Failed to get the status of endpoint http://tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal:2379 (context deadline exceeded)
 ```
