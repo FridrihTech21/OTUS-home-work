@@ -805,12 +805,11 @@ postgresql:
 
 После старта реплик Standby кластера:
 <img width="1007" height="153" alt="image" src="https://github.com/user-attachments/assets/4bec65ac-83f7-418e-8be7-eb4a029e1911" />
+<img width="931" height="145" alt="image" src="https://github.com/user-attachments/assets/6833fc3a-364e-4288-b59f-82402437ac65" />
 
 ## 2.3 Проверка репликации  
 
-
-
-
+<img width="1789" height="976" alt="image" src="https://github.com/user-attachments/assets/08b99960-8902-4b60-881d-b0fd16dd1984" />
 
 # 4) Резервное копирование в S3 MINIO
 
