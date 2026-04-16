@@ -680,11 +680,38 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 
 ### С божьей помощью продолжим =)
 
-Дропнем прошлую БД и выполним все заново, в этот раз выставим `-s 100`:
-<img width="982" height="544" alt="image" src="https://github.com/user-attachments/assets/f4b176e5-7b16-424d-817d-a4baf6b71a74" />
+Дропнем прошлую БД и выполним все заново, в этот раз выставим `-s 350`:
+<img width="1057" height="162" alt="image" src="https://github.com/user-attachments/assets/ed2e1746-cbef-4134-aca8-08ec64a398e0" />
+
+И так, загрузили 7,3 ГБ данных, при помощи `pgbench`:
+<img width="923" height="528" alt="image" src="https://github.com/user-attachments/assets/d429ba30-e2a4-431d-a305-a25b4f316b11" />
+
+И добавим слот репликации для Кластера-2:
+<img width="785" height="501" alt="image" src="https://github.com/user-attachments/assets/f7ba9e80-d8c1-4f1c-8992-78159f4d6b07" />
+
+Добавим следующие строки в pg_hba.conf:
+```
+local   replication     all                                     trust
+host    replication     all             127.0.0.1/32            trust
+host    replication     all             ::1/128                 trust
+host replication replicator 127.0.0.1/8 md5
+host replication replicator 10.92.36.9/32 md5
+host replication replicator 10.92.36.64/32 md5
+host replication replicator 10.92.36.81/32 md5
+host replication replicator 10.92.35.0/24 md5
+host replication replicator 10.92.36.0/24 md5
+```
+
+<img width="881" height="688" alt="image" src="https://github.com/user-attachments/assets/6f479d76-668b-4435-a2c8-30147773fd57" />
 
 
 ## 2.2 Настройка Standby
+
+Проверим, что все живо:
+<img width="942" height="196" alt="image" src="https://github.com/user-attachments/assets/35da3b28-8d35-416a-85d2-07c4ede660d7" />
+
+Настройка Standby осуществлется по следующему плану: 
+- 
 
 ## 2.3 Проверка репликации  
 
