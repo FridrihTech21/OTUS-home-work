@@ -710,8 +710,90 @@ host replication replicator 10.92.36.0/24 md5
 Проверим, что все живо:
 <img width="942" height="196" alt="image" src="https://github.com/user-attachments/assets/35da3b28-8d35-416a-85d2-07c4ede660d7" />
 
-Настройка Standby осуществлется по следующему плану: 
-- 
+Схема включения Кластера-2 как репликатора Кластера состоит из:
+- Остановка всех нод
+- Удаление информации в DCS ETCD-2 о Кластере-2
+- Удаление PGADATA
+- Правка конфига Patroni Кластера-2
+- Запуск ноды-лидера
+- Запуск всех остальных нод Кластера-2
+Останавливаем все ноды:
+```
+sudo systemctl stop patroni.service
+```
+
+Удаляем информацию о Кластере-2 в ETCD-2:
+
+```
+ETCDCTL_API=2 etcdctl ls / --recursive                         ### Проверка
+ETCDCTL_API=2 etcdctl rm --recursive /patroni/patroni_cluster  ### Удаление
+ETCDCTL_API=2 etcdctl ls / --recursive                         ### Проверка
+```
+
+Правим конфиг `/etc/patroni/conf.yml`:
+
+```
+Было:
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+-----///-----
+
+Стало:
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    master_start_timeout: 30
+    postgresql:
+      use_pg_rewind: true
+      parameters:
+        wal_level: replica
+        max_replication_slots: 10
+        max_wal_senders: 10
+    standby_cluster:
+      host: "10.92.35.112,10.92.35.52,10.92.35.162"
+      port: 5432
+      primary_slot_name: "standby_cluster_2_slot"
+      create_replica_methods:
+        - basebackup
+```
+
+Добавляем в pg_hba: 
+
+```
+postgresql:
+  pg_hba:
+  - local   all             all                                     peer
+  - local   replication     all                                     trust
+  - host    replication     all             127.0.0.1/32            trust
+  - host    replication     all             ::1/128                 trust
+  - host replication replicator 127.0.0.1/8 md5
+  - host replication replicator 10.92.35.60/32 md5
+  - host replication replicator 10.92.35.117/32 md5
+  - host replication replicator 10.92.35.12/32 md5
+  - host replication replicator 10.92.35.0/24 md5
+  - host replication replicator 10.92.36.0/24 md5
+  - host all         all        10.92.36.0/24 md5
+  - host all         all        10.92.35.0/24 md5
+  - host all         all        10.92.5.0/24 md5
+```
+
+<img width="969" height="535" alt="image" src="https://github.com/user-attachments/assets/6032bf1b-5408-43aa-8448-c41030437374" />
+
 
 ## 2.3 Проверка репликации  
 
