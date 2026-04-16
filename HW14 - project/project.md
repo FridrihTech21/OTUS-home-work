@@ -98,8 +98,8 @@ EOF
    2.1) Настройка Primary
    2.2) Настройка Standby
    2.3) Проверка репликации  
-4) Keepalived & HAproxy
-5) pgBackRest & S3 MINIO
+3) Keepalived & HAproxy
+4) pgBackRest & S3 MINIO
 
 # 1. Установка кластеров Patroni
 
@@ -950,5 +950,29 @@ EOF
 
 4.2) Настройка
 Внутренняя настройка S3
+
+Настройка TLS для pgbackrest:
+<img width="1673" height="970" alt="image" src="https://github.com/user-attachments/assets/debaa629-c212-4817-ab86-06d0a7501cc1" />
+
+```
+tee -a /var/lib/postgresql/.ssh/authorized_keys << EOF
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFcYEnI+xT430bzcEEWUVMwcAsbXlbz2mqwLncdSNKjn postgres@tarasov-test-otus-proj-cluster-1-node-1
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMzApnSCe7J5x8Bi3Ihtr73truJvZUTbMTJ0EpSzW8PC postgres@tarasov-test-otus-proj-cluster-1-node-2
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHsE1HrOd07WQ0TGZ1EMavcGmCYsuNLpT6dPyzyp7NP8 postgres@tarasov-test-otus-proj-cluster-1-node-3
+
+ДОБАВИТЬ ССШ HAproxy!
+
+EOF
+```
+
+
+Нужно пустить трафик pgbackrest через HAproxy, он позволит определять primary автоматически. 
+
+Далее запустим установку pgbackrest
+<img width="1292" height="1042" alt="image" src="https://github.com/user-attachments/assets/2d0f3824-fbcc-4bf2-a4f1-0f6063611499" />
+<img width="1563" height="393" alt="image" src="https://github.com/user-attachments/assets/8aa74b4f-3dd7-477f-b12d-72b0b6eb7f6a" />
+
+
+
 
 4.3) Осуществление резервного копирования с primary в S3(В этом поможет HAproxy)
