@@ -814,9 +814,178 @@ postgresql:
 # 3) Keepalived & HAproxy
 
 Схема Keepalived & HAproxy:
+```
 Internet -> Keepalived_master(HAproxy_master)        host_1: tarasov-test-otus-proj-balancer
           |
           |--> Keepalived_standby(HAproxy_standby)   host_2: tarasov-test-otus-proj-s3
+```
+
+1) Устанавливаем HAproxy & Keepalived
+2) Прописываем корректные настройки по роли сервров Keepalived
+3) Тест работы HAproxy & Keepalived
+
+Установка:
+<details>
+<summary>inventory.ini</summary>
+  
+```yml
+[servers]
+tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+```
+</details>
+
+<details>
+<summary>setup.yml</summary>
+  
+```yml
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Install haproxy
+      become: true
+      ansible.builtin.apt:
+        name: haproxy
+        update_cache: yes
+        state: present
+    - name: Install Keepalived
+      become: true
+      ansible.builtin.apt:
+        name: keepalived
+        update_cache: yes
+        state: present
+    - name: Copy HAproxy configuration template to /etc/haproxy/haproxy.cfg
+      ansible.builtin.template:
+        src: templates/conf_HAproxy.j2
+        dest: /etc/haproxy/haproxy.cfg
+    - name: Copy HAproxy configuration template to /etc/keepalived/keepalived.conf
+      ansible.builtin.template:
+        src: templates/conf_Keepalived.j2
+        dest: /etc/keepalived/keepalived.conf
+    - name: Systemd enabled and starting haproxy.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: haproxy.service
+        enabled: true
+    - name: Systemd enabled and starting keepalived.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: keepalived.service
+        enabled: true
+```
+</details>
+
+<details>
+<summary>conf_HAproxy.j2</summary>
+  
+```yml
+global
+   maxconn 100
+   log 127.0.0.1 local2
+
+defaults
+   log global
+   mode tcp
+   retries 2
+   timeout client 30m
+   timeout connect 4s
+   timeout server 30m
+   timeout check 5s
+
+listen stats
+   mode http
+   bind *:7000
+   stats enable
+   stats uri /
+
+listen production
+   bind *:5000
+   balance roundrobin
+   option httpchk GET/master
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal 10.92.36.9:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal 10.92.36.64:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal 10.92.36.81:5432 maxconn 100 check port 8008
+         # STANBY ZONE
+   server tarasov-test-otus-proj-cluster-2-node-1.ru-central1.internal 10.92.35.60:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-2-node-2.ru-central1.internal 10.92.35.117:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-2-node-3.ru-central1.internal 10.92.35.12:5432 maxconn 100 check port 8008 
+
+listen standby
+   bind *:5001
+   option httpchk GET/replica
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal 10.92.36.9:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal 10.92.36.64:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal 10.92.36.81:5432 maxconn 100 check port 8008
+         # STANBY ZONE
+   server tarasov-test-otus-proj-cluster-2-node-1.ru-central1.internal 10.92.35.60:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-2-node-2.ru-central1.internal 10.92.35.117:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-2-node-3.ru-central1.internal 10.92.35.12:5432 maxconn 100 check port 8008 
+
+listen standby-production
+   bind *:5000
+   option httpchk GET/master
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal 10.92.36.9:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal 10.92.36.64:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal 10.92.36.81:5432 maxconn 100 check port 8008
+
+listen standby-leader
+   bind *:5000
+   option httpchk GET/standby-leader
+   http-check expect status 200
+   default-server inter 3s fall 3 rise 2 on-marked-down shutdown-sessions
+   server tarasov-test-otus-proj-cluster-2-node-1.ru-central1.internal 10.92.35.60:5432 maxconn 100 check port 8008
+   server tarasov-test-otus-proj-cluster-2-node-2.ru-central1.internal 10.92.35.117:5432 maxconn 100 check port 8008 
+   server tarasov-test-otus-proj-cluster-2-node-3.ru-central1.internal 10.92.35.12:5432 maxconn 100 check port 8008 
+```
+</details>
+
+<details>
+<summary>conf_Keepalived.j2</summary>
+  
+```yml
+vrrp_script chk_haproxy {
+    script "/usr/bin/killall -0 haproxy"
+    interval 2
+    weight 2
+    fall 3
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51
+    priority 101 //Change priority: 101 - master; 100 - standby
+    advert_int 1
+    authentication {
+        auth_type admin
+        auth_pass admin
+    }
+    virtual_ipaddress {
+        10.92.5.83
+    }
+    track_script {
+        chk_haproxy
+    }
+    notify_master "/etc/keepalived/notify_master.sh"
+    notify_backup "/etc/keepalived/notify_backup.sh"
+    notify_fault "/etc/keepalived/notify_fault.sh"
+}
+```
+</details>
+
+<img width="823" height="186" alt="image" src="https://github.com/user-attachments/assets/392aea3e-1d09-4e21-915b-2eba924bb8f4" />
+<img width="1897" height="926" alt="image" src="https://github.com/user-attachments/assets/94b3d102-e8a4-4364-ac91-de29d327ca55" />
+<img width="1756" height="1055" alt="image" src="https://github.com/user-attachments/assets/1e6c8f78-d288-4067-944e-a3e4f0300128" />
+
 
 
 
