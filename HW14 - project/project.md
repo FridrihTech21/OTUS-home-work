@@ -820,9 +820,7 @@ Internet -> Keepalived_master(HAproxy_master)        host_1: tarasov-test-otus-p
           |--> Keepalived_standby(HAproxy_standby)   host_2: tarasov-test-otus-proj-s3
 ```
 
-1) Устанавливаем HAproxy & Keepalived
-2) Прописываем корректные настройки по роли сервров Keepalived
-3) Тест работы HAproxy & Keepalived
+### 3.1) Устанавливаем HAproxy & Keepalived
 
 Установка:
 <details>
@@ -982,11 +980,21 @@ vrrp_instance VI_1 {
 ```
 </details>
 
-<img width="823" height="186" alt="image" src="https://github.com/user-attachments/assets/392aea3e-1d09-4e21-915b-2eba924bb8f4" />
 <img width="1897" height="926" alt="image" src="https://github.com/user-attachments/assets/94b3d102-e8a4-4364-ac91-de29d327ca55" />
 <img width="1756" height="1055" alt="image" src="https://github.com/user-attachments/assets/1e6c8f78-d288-4067-944e-a3e4f0300128" />
 
+### 3.2) Прописываем корректные настройки по роли сервров Keepalived
 
+`priority 101 //Change priority: 101 - master; 100 - standby` - Отводим роль мастера или стендбая
+`10.92.5.83` - Прописываем VIP `virtual_ipaddress {10.92.5.83}`
+<img width="896" height="101" alt="image" src="https://github.com/user-attachments/assets/2f850080-0289-4f5a-854b-25dddb5ff4d3" />
+<img width="862" height="92" alt="image" src="https://github.com/user-attachments/assets/8a224e0d-91b4-4a25-8873-b2436b5599ad" />
+
+
+### 3.3) Тест работы HAproxy & Keepalived
+
+
+<img width="823" height="186" alt="image" src="https://github.com/user-attachments/assets/392aea3e-1d09-4e21-915b-2eba924bb8f4" />
 
 
 # 4) Резервное копирование в S3 MINIO
