@@ -811,16 +811,9 @@ postgresql:
 
 <img width="1789" height="976" alt="image" src="https://github.com/user-attachments/assets/08b99960-8902-4b60-881d-b0fd16dd1984" />
 
-# 3) Keepalived & HAproxy
+# 3) HAproxy
 
-Схема Keepalived & HAproxy:
-```
-Internet -> Keepalived_master(HAproxy_master)        host_1: tarasov-test-otus-proj-balancer
-          |
-          |--> Keepalived_standby(HAproxy_standby)   host_2: tarasov-test-otus-proj-s3
-```
-
-### 3.1) Устанавливаем HAproxy & Keepalived
+### 3.1) Устанавливаем HAproxy
 
 Установка:
 <details>
@@ -828,7 +821,6 @@ Internet -> Keepalived_master(HAproxy_master)        host_1: tarasov-test-otus-p
   
 ```yml
 [servers]
-tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 ```
 </details>
@@ -848,13 +840,7 @@ tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansi
         name: haproxy
         update_cache: yes
         state: present
-    - name: Install Keepalived
-      become: true
-      ansible.builtin.apt:
-        name: keepalived
-        update_cache: yes
-        state: present
-    - name: Copy HAproxy configuration template to /etc/haproxy/haproxy.cfg
+      - name: Copy HAproxy configuration template to /etc/haproxy/haproxy.cfg
       ansible.builtin.template:
         src: templates/conf_HAproxy.j2
         dest: /etc/haproxy/haproxy.cfg
@@ -866,11 +852,6 @@ tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansi
       ansible.builtin.systemd_service:
         daemon_reload: true
         name: haproxy.service
-        enabled: true
-    - name: Systemd enabled and starting keepalived.service
-      ansible.builtin.systemd_service:
-        daemon_reload: true
-        name: keepalived.service
         enabled: true
 ```
 </details>
@@ -945,54 +926,9 @@ listen standby-leader
 ```
 </details>
 
-<details>
-<summary>conf_Keepalived.j2</summary>
-  
-```yml
-vrrp_script chk_haproxy {
-    script "/usr/bin/killall -0 haproxy"
-    interval 2
-    weight 2
-    fall 3
-    rise 2
-}
-
-vrrp_instance VI_1 {
-    state MASTER
-    interface eth0
-    virtual_router_id 51
-    priority 101 //Change priority: 101 - master; 100 - standby
-    advert_int 1
-    authentication {
-        auth_type admin
-        auth_pass admin
-    }
-    virtual_ipaddress {
-        10.92.5.83
-    }
-    track_script {
-        chk_haproxy
-    }
-    notify_master "/etc/keepalived/notify_master.sh"
-    notify_backup "/etc/keepalived/notify_backup.sh"
-    notify_fault "/etc/keepalived/notify_fault.sh"
-}
-```
-</details>
 <img width="823" height="186" alt="image" src="https://github.com/user-attachments/assets/392aea3e-1d09-4e21-915b-2eba924bb8f4" />
 
-### 3.2) Прописываем корректные настройки по роли сервров Keepalived
-
-`priority 101 //Change priority: 101 - master; 100 - standby` - Отводим роль мастера или стендбая
-
-`10.92.5.83` - Прописываем VIP `virtual_ipaddress {10.92.5.83}`
-
-И запускаем:
-<img width="896" height="101" alt="image" src="https://github.com/user-attachments/assets/2f850080-0289-4f5a-854b-25dddb5ff4d3" />
-<img width="862" height="92" alt="image" src="https://github.com/user-attachments/assets/8a224e0d-91b4-4a25-8873-b2436b5599ad" />
-<img width="1756" height="1055" alt="image" src="https://github.com/user-attachments/assets/1e6c8f78-d288-4067-944e-a3e4f0300128" />
-
-### 3.3) Тест работы HAproxy & Keepalived
+### 3.3) Тест работы HAproxy
 
 <img width="1897" height="926" alt="image" src="https://github.com/user-attachments/assets/94b3d102-e8a4-4364-ac91-de29d327ca55" />
 
