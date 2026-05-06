@@ -1173,7 +1173,7 @@ EOF
 </details>
 
 
-4.3) Осуществление резервного копирования с primary в S3
+## 4.3) Осуществление резервного копирования с primary в S3
 
 Бэкапировать будем с удаленных машин, т.е. в распоряжении у нас имеются две машины, которые не относяться непосредственно к кластерам Patroni. Это `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`.  
 Для осуществления бэкапирования в S3 потребуется:
@@ -1187,7 +1187,7 @@ EOF
 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`;
 4.3.4) Создание конфигурационного файла для `pgBackRest`.
 
-### 4.3.1) Установка `pgBackRest` на все машины
+# 4.3.1) Установка `pgBackRest` на все машины
 
 Установка производится при помощи ansible:
 
@@ -1282,7 +1282,7 @@ tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ss
 ```
 </details>
 
-### 4.3.2) Создание пользователя из-под которого `pgBackRest` будет подключаться к кластерам
+# 4.3.2) Создание пользователя из-под которого `pgBackRest` будет подключаться к кластерам
 
 Создаем пользователя `postgres` для SSH на `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`:
 
@@ -1291,11 +1291,11 @@ sudo useradd -m -s /bin/bash postgres
 sudo usermod -aG fvtarasov postgres
 ```
 
-### 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`
+# 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`
 
 Создаем ключи на `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3` и вписываем их в autorized_keys на остальных хостах. 
 
-### 4.3.4) Создание конфигурационного файла для `pgBackRest`
+# 4.3.4) Создание конфигурационного файла для `pgBackRest`
 
 <details>
 <summary>pgbackrest_conf.j2</summary>
