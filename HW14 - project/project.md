@@ -935,7 +935,7 @@ listen standby-leader
 
 # 4) Резервное копирование в S3 MINIO
 
-4.1) Установка 
+## 4.1) Установка 
 
 Установка проходит при помощи Ansible:
 
@@ -1070,7 +1070,8 @@ EOF
 
 <img width="1895" height="998" alt="image" src="https://github.com/user-attachments/assets/7b14a5cc-262b-47ff-bfeb-7c4d3a91e4ac" />
 
-4.2) Настройка
+## 4.2) Настройка
+
 Внутренняя настройка S3
 
 Настройка TLS для pgbackrest:
@@ -1087,104 +1088,27 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHsE1HrOd07WQ0TGZ1EMavcGmCYsuNLpT6dPyzyp7NP8
 EOF
 ```
 
-### Установка pgBackRest:
-Нужно пустить трафик pgbackrest через HAproxy, он позволит определять primary автоматически. 
+## 4.3) Установка pgBackRest и осуществление резервного копирования с primary в S3
 
-Далее запустим установку pgbackrest
-<img width="1292" height="1042" alt="image" src="https://github.com/user-attachments/assets/2d0f3824-fbcc-4bf2-a4f1-0f6063611499" />
-<img width="1563" height="393" alt="image" src="https://github.com/user-attachments/assets/8aa74b4f-3dd7-477f-b12d-72b0b6eb7f6a" />
+`Pgbackrest` позволитяет определять standby автоматически для забора бекапа с него. 
 
-<details>
-<summary>setup.yml</summary>
-  
-```yml
----
-- name: Configure etcd cluster
-  hosts: servers 
-  become: yes
-  gather_facts: yes 
-  tasks:
-    - name: Install pgbackrest
-      ansible.builtin.apt:
-        name: pgbackrest
-        update_cache: yes
-        state: present 
-      become: yes
-    - name: Ensure /var/log/pgbackrest directory exists
-      ansible.builtin.file:
-        path: /var/log/pgbackrest
-        state: directory
-        mode: '0770'
-        owner: postgres
-        group: postgres
-      become: yes
-    - name: Ensure /var/log/pgbackrest directory exists
-      ansible.builtin.file:
-        path: /var/log/pgbackrest
-        state: directory
-        owner: postgres
-        group: postgres
-      become: yes
-    - name: Ensure /etc/pgbackrest/ directory exists
-      ansible.builtin.file:
-        path: /etc/pgbackrest/
-        state: directory
-      become: yes
-    - name: Ensure /data/certs directory exists for S3
-      ansible.builtin.file:
-        path: /data/certs
-        state: directory
-        owner: postgres
-        group: postgres
-        mode: '0700'
-      become: yes
-    - name: Copy pgbackrest configuration template to /etc/pgbackrest/pgbackrest.conf
-      ansible.builtin.template:
-        src: pgbackrest_conf.j2
-        dest: /etc/pgbackrest/pgbackrest.conf
-        owner: postgres
-        group: postgres
-      become: yes
-    - name: Copy ca.crt to nodes Patroni
-      ansible.builtin.template:
-        src: ca.j2
-        dest: /data/certs/ca.crt
-        owner: postgres
-        group: postgres
-        mode: '0600'
-      become: yes
-    - name: Copy server.crt to nodes Patroni
-      ansible.builtin.template:
-        src: server_crt.j2
-        dest: /data/certs/server.crt
-        owner: postgres
-        group: postgres
-        mode: '0600'
-      become: yes
-    - name: Copy server.key to nodes Patroni
-      ansible.builtin.template:
-        src: server_key.j2
-        dest: /data/certs/server.key
-        owner: postgres
-        group: postgres
-        mode: '0600'
-      become: yes
-```
-</details>
-
-
-## 4.3) Осуществление резервного копирования с primary в S3
-
-Бэкапировать будем с удаленных машин, т.е. в распоряжении у нас имеются две машины, которые не относяться непосредственно к кластерам Patroni. Это `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`.  
+Бэкапировать будем при помощи удаленных машин, т.е. в распоряжении у нас имеются две машины, которые не относяться непосредственно к кластерам Patroni. Это `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`.  
 Для осуществления бэкапирования в S3 потребуется:
 
 4.3.1) Установка `pgBackRest` на все машины;
-  4.3.1.1) Установка пакета
-  4.3.1.2) Установка зависимостей
-  4.3.1.3) Копирование шаблона конфига для соответсвующего кластера
-  4.3.1.4) Копирование ключей для взаимоействия с S3 MINIO
+
+  4.3.1.1) Установка пакета;
+  
+  4.3.1.2) Установка зависимостей;
+  
+  4.3.1.3) Копирование шаблона конфига для соответсвующего кластера;
+  
+  4.3.1.4) Копирование ключей для взаимоействия с S3 MINIO;
+  
 4.3.2) Создание пользователя из-под которого `pgBackRest` будет подключаться к кластерам;
+
 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`;
+
 4.3.4) Создание конфигурационного файла для `pgBackRest`.
 
 # 4.3.1) Установка `pgBackRest` на все машины
