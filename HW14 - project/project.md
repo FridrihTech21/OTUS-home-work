@@ -1,6 +1,6 @@
 # ТЕМА: Развертывание двух реплицируемых географически распределенных кластеров PostgreSQL в режиме высокой доступности и отказоустойчивости на базе Patroni и резервным копированием в MINIO S3
 
-`tarasov-test-otus-proj-balancer` - HAproxy, keepalived
+`tarasov-test-otus-proj-balancer` - HAproxy
 
 `tarasov-test-otus-proj-s3` - S3 MINIO
 
@@ -90,15 +90,25 @@ EOF
 <img width="1379" height="645" alt="image" src="https://github.com/user-attachments/assets/54a4aeeb-8dee-4390-8416-abc3359e8084" />
 
 Далее будем идти по плану:
+
 1) Установка кластеров Patroni
+
    1.1) Установка ETCD
+   
    1.2) Установка PostgreSQL
+   
    1.3) Установка Patroni
+   
 2) Репликация(Primary & Standby)
+
    2.1) Настройка Primary
+   
    2.2) Настройка Standby
+   
    2.3) Проверка репликации  
-3) Keepalived & HAproxy
+   
+3) HAproxy
+
 4) pgBackRest & S3 MINIO
 
 # 1. Установка кластеров Patroni
@@ -108,6 +118,7 @@ EOF
 ## 1.1 Установка ETCD
 
 Дерево каталога:
+
 <img width="777" height="182" alt="image" src="https://github.com/user-attachments/assets/02409b6b-3d40-4d6b-b876-5eee584ecece" />
 
 <details>
@@ -223,9 +234,9 @@ EOF
 ```
 </details>
 
-<img width="1765" height="224" alt="image" src="https://github.com/user-attachments/assets/7100515b-9801-4146-9458-8d15a2938faf" />
+ETCD установлен:
 
-ETCD установлен.
+<img width="1765" height="224" alt="image" src="https://github.com/user-attachments/assets/7100515b-9801-4146-9458-8d15a2938faf" />
 
 ## 1.2 Установка PostgreSQL
 
@@ -539,10 +550,10 @@ EOF
 ```
 </details>
 
+Patroni установлен:
+
 <img width="1091" height="180" alt="image" src="https://github.com/user-attachments/assets/9d3af9df-fee6-4173-a9d4-3529395ff613" />
 <img width="1097" height="178" alt="image" src="https://github.com/user-attachments/assets/a51ecd3b-70f5-406e-80e2-32e7587a5f6d" />
-
-Patroni установлен.
 
 # 2 Репликация(Primary & Standby)
 
@@ -570,7 +581,7 @@ postgres=#
 
 <img width="866" height="581" alt="image" src="https://github.com/user-attachments/assets/33db6b85-98a1-46fe-98dd-a472df47f994" />
 
-В чем же дело? Идем смотреть оги Patroni:
+В чем же дело? Идем смотреть логи Patroni:
 
 ```
 The above exception was the direct cause of the following exception:
@@ -597,7 +608,8 @@ Traceback (most recent call last):
 urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node2_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host='tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal', port=2379): Read timed out. (read timeout=3.333215634333404)"))
 ```
 
-Patroni пробует достучаться до ETCD-3 `2026-04-15 12:44:15,886 ERROR: Request to server http://tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal:2379 failed: MaxRetryError('HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node1_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Read timed out. (read timeout=3.3327407823332655)"))')`
+Patroni пробует достучаться до ETCD-3 :
+```2026-04-15 12:44:15,886 ERROR: Request to server http://tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal:2379 failed: MaxRetryError('HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Max retries exceeded with url: /v2/keys/patroni_1/patroni_cluster_1/members/patroni_node1_cluster_1 (Caused by ReadTimeoutError("HTTPConnectionPool(host=\'tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal\', port=2379): Read timed out. (read timeout=3.3327407823332655)"))')```
 Т.к. ETCD-3 запускался последним, то и time out понятно из-за чего.
 
 Интереснее ситуация обстоит на ETCD-2:
@@ -625,6 +637,7 @@ Apr 15 12:31:30 tarasov-test-otus-proj-cluster-1-node-2 etcd[786]: ignored file 
 При заходе по SSH ошибка:
 
 <img width="540" height="63" alt="image" src="https://github.com/user-attachments/assets/c9e0b3ac-95f3-4442-9aa4-87706bc4cdca" />
+
 Судя по всему перетерся SSH-ключ на cluste-1-node-2 при расширении простаранства на диске... Ладно, исправим. 
 Для этого:
 - Удалить из кластера ETCD проблемную ноду
@@ -672,8 +685,11 @@ Apr 15 18:56:36 tarasov-test-otus-proj-cluster-1-node-2 etcd[3451]: raft2026/04/
 
 Далее нужно добавить ноду Patroni к существующему кластеру. 
 - Установить PostgreSQL:
+
   <img width="587" height="65" alt="image" src="https://github.com/user-attachments/assets/f32babb7-4d18-4cb7-b4d8-deb65490a70e" />
+  
 - Установить Patroni(изменить pg_hba.conf на работающих нодах для разрешения репликации с лидера на новую ноду, запустить Ansible YML):
+
 <img width="1786" height="643" alt="image" src="https://github.com/user-attachments/assets/ef2d1b07-a3a0-4e25-a1d8-958eb4ef84d7" />
 <img width="1102" height="313" alt="image" src="https://github.com/user-attachments/assets/97538d9b-08fb-43fd-83d6-963f45bdc0ec" />
 
@@ -721,10 +737,11 @@ postgresql:
 Схема включения Кластера-2 как репликатора Кластера состоит из:
 - Остановка всех нод
 - Удаление информации в DCS ETCD-2 о Кластере-2
-- Удаление PGADATA
+- Удаление PGDATA
 - Правка конфига Patroni Кластера-2
 - Запуск ноды-лидера
 - Запуск всех остальных нод Кластера-2
+
 Останавливаем все ноды:
 ```
 sudo systemctl stop patroni.service
@@ -811,7 +828,7 @@ postgresql:
 
 <img width="1789" height="976" alt="image" src="https://github.com/user-attachments/assets/08b99960-8902-4b60-881d-b0fd16dd1984" />
 
-# 3) HAproxy
+# 3 HAproxy
 
 ### 3.1) Устанавливаем HAproxy
 
@@ -1082,17 +1099,15 @@ tee -a /var/lib/postgresql/.ssh/authorized_keys << EOF
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFcYEnI+xT430bzcEEWUVMwcAsbXlbz2mqwLncdSNKjn postgres@tarasov-test-otus-proj-cluster-1-node-1
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMzApnSCe7J5x8Bi3Ihtr73truJvZUTbMTJ0EpSzW8PC postgres@tarasov-test-otus-proj-cluster-1-node-2
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHsE1HrOd07WQ0TGZ1EMavcGmCYsuNLpT6dPyzyp7NP8 postgres@tarasov-test-otus-proj-cluster-1-node-3
-
-ДОБАВИТЬ ССШ HAproxy!
-
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7ZdqiyXBzEHM15yXSSd+PQp0+PzDBk7SZ+zpNCCWRE fvtarasov@tarasov-test-otus-proj-balancer
 EOF
 ```
 
 ## 4.3) Установка pgBackRest и осуществление резервного копирования с primary в S3
 
 `Pgbackrest` позволитяет определять standby автоматически для забора бекапа с него. 
+Бэкапировать будем при помощи него самого с primary кластера.  
 
-Бэкапировать будем при помощи удаленных машин, т.е. в распоряжении у нас имеются две машины, которые не относяться непосредственно к кластерам Patroni. Это `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`.  
 Для осуществления бэкапирования в S3 потребуется:
 
 4.3.1) Установка `pgBackRest` на все машины;
@@ -1111,7 +1126,7 @@ EOF
 
 4.3.4) Создание конфигурационного файла для `pgBackRest`.
 
-# 4.3.1) Установка `pgBackRest` на все машины
+### 4.3.1) Установка `pgBackRest` на все машины
 
 Установка производится при помощи ansible:
 
@@ -1201,12 +1216,10 @@ EOF
 tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
-tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
-tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 ```
 </details>
 
-# 4.3.2) Создание пользователя из-под которого `pgBackRest` будет подключаться к кластерам
+### 4.3.2) Создание пользователя из-под которого `pgBackRest` будет подключаться к кластерам
 
 Создаем пользователя `postgres` для SSH на `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3`:
 
@@ -1215,11 +1228,11 @@ sudo useradd -m -s /bin/bash postgres
 sudo usermod -aG fvtarasov postgres
 ```
 
-# 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`
+### 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`
 
 Создаем ключи на `tarasov-test-otus-proj-balancer` и `tarasov-test-otus-proj-s3` и вписываем их в autorized_keys на остальных хостах. 
 
-# 4.3.4) Создание конфигурационного файла для `pgBackRest`
+### 4.3.4) Создание конфигурационного файла для `pgBackRest`
 
 <details>
 <summary>pgbackrest_conf.j2</summary>
