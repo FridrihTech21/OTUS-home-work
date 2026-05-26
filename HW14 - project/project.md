@@ -1106,8 +1106,7 @@ EOF
 
 ## 4.3) Установка pgBackRest и осуществление резервного копирования с primary в S3
 
-`Pgbackrest` позволитяет определять standby автоматически для забора бекапа с него. 
-Бэкапировать будем при помощи него самого с primary кластера.  
+Схема штатного бекапирования выглядит следующим образом: на мастере выполняем архивацию и пуш в S3, после чего в объектном хранилище появятся WAL-файлы. Далее архивация и пуш будет проиводится при помощи отдельной машины, например с машины балансера. 
 
 Для осуществления бэкапирования в S3 потребуется:
 
@@ -1219,6 +1218,8 @@ EOF
 tarasov-test-otus-proj-cluster-1-node-1.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 tarasov-test-otus-proj-cluster-1-node-2.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 tarasov-test-otus-proj-cluster-1-node-3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-proj-balancer.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
+tarasov-test-otus-proj-s3.ru-central1.internal ansible_user=fvtarasov ansible_ssh_private_key_file=~/.ssh/id_ed25519
 ```
 </details>
 
@@ -1311,3 +1312,9 @@ log-level-file=debug
 ```
 
 Далее перезагружаем на Patroni: `patronictl -c /etc/patroni/conf.yml restart patroni_cluster_1`
+После чего, пробуем выполнить архивацию и пуш в S3 с мастер-узла нашего Patroni: `pgbackrest --stanza=backup-cluster-1 --type=full backup`
+
+<img width="1710" height="512" alt="image" src="https://github.com/user-attachments/assets/9d672b14-1c14-4a15-97da-9aeccfecbccf" />
+<img width="1273" height="565" alt="image" src="https://github.com/user-attachments/assets/ab809f8a-d035-4fb3-904d-a494afb60821" />
+
+На картинках выше, видно наш созданный бекап. 
