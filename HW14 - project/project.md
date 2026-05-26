@@ -804,6 +804,7 @@ postgresql:
   pg_hba:
   - local   all             all                                     peer
   - local   replication     all                                     trust
+  - host    all             all             127.0.0.1/32            md5
   - host    replication     all             127.0.0.1/32            trust
   - host    replication     all             ::1/128                 trust
   - host replication replicator 127.0.0.1/8 md5        # 
@@ -1124,7 +1125,9 @@ EOF
 
 4.3.3) Создание сетевой связности по SSH для пользователя `pgBackRest`;
 
-4.3.4) Создание конфигурационного файла для `pgBackRest`.
+4.3.4) Создание конфигурационного файла для `pgBackRest`;
+
+4.3.5) Архивация и заливка бекапа
 
 ### 4.3.1) Установка `pgBackRest` на все машины
 
@@ -1293,3 +1296,18 @@ log-level-file=debug
 <img width="1763" height="160" alt="image" src="https://github.com/user-attachments/assets/c04ac7eb-2a6b-4846-a340-c911ef6146c8" />
 <img width="1835" height="535" alt="image" src="https://github.com/user-attachments/assets/7b798f00-f5be-4a55-96bb-a09435c30252" />
 
+Но это еще не все, теперь нужно выполнить архивацию и заливку бекапа в предоставленный бакет.
+
+### 4.3.5) Архивация и заливка бекапа
+
+Для архивации и заливки бекапа нужно установить несколько парметров в postgresql.conf, но делать это будем через `patronictl -c /etc/patroni/confi.yml edit-config`:
+
+<img width="829" height="244" alt="image" src="https://github.com/user-attachments/assets/6ee575d5-b084-4d3c-b387-cb5156f4303e" />
+
+Пропишем параметры для архивации WAL: 
+```
+    archive_command: /usr/bin/pgbackrest --stanza=backup-cluster-1-ver1 archive-push %p # т.е. укажим, что архивация включена и по какой stanza ее выполнять
+    archive_mode: 'on'
+```
+
+Далее перезагружаем на Patroni: `patronictl -c /etc/patroni/conf.yml restart patroni_cluster_1`
