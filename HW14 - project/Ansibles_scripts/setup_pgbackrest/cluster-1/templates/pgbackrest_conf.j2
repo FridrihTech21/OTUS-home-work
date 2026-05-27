@@ -1,0 +1,25 @@
+[backup-cluster-1]
+pg1-path=/data/16/
+pg1-socket-path=/data/16
+
+[backup-cluster-1-ver0]
+pg1-path=/data/16/
+
+[global]
+repo1-type=s3
+repo1-path=/backups-psql-16
+repo1-s3-bucket=backups
+repo1-s3-endpoint=https://tarasov-test-otus-proj-s3.ru-central1.internal
+repo1-s3-region=ru-central-1
+repo1-s3-key=admin
+repo1-s3-key-secret=admin123
+repo1-s3-uri-style=path
+repo1-storage-port=9000
+repo1-storage-verify-tls=n
+
+# Параметры для архивации
+compress-type=zst
+compress-level=6
+
+log-level-console=info
+log-level-file=debug
