@@ -1,0 +1,53 @@
+---
+- name: Configure etcd cluster
+  hosts: servers 
+  become: yes
+  gather_facts: yes 
+  vars:
+    etcd_cluster_members: "{{ groups['servers'] | map('extract', hostvars, ['ansible_fqdn']) | list }}"
+    etcd_initial_cluster_string: >-
+      {{
+        groups['servers']
+        | map('extract', hostvars, ['ansible_fqdn'])
+        | zip(['etcd1', 'etcd2', 'etcd3'])
+        | map('reverse')
+        | map('join', '=')
+        | map('regex_replace', '^(.*)=(.*)$', '\1=http://\2:2380')
+        | join(',')
+      }}
+    etcd_node_index: "{{ groups['servers'].index(inventory_hostname) }}"
+    etcd_names_map: ['etcd1', 'etcd2', 'etcd3']
+    etcd_node_name: "{{ etcd_names_map[etcd_node_index] }}"
+  tasks:
+    - name: Change cloud.cfg
+      become: true
+      ansible.builtin.replace:
+        path: /etc/cloud/cloud.cfg
+        regexp: '- update_etc_hosts'
+        replace: '#  - update_etc_hosts'
+    - name: Install etcd-server
+      ansible.builtin.apt:
+        name: etcd-server
+        update_cache: yes
+        state: present 
+    - name: Install etcd-client
+      ansible.builtin.apt:
+        name: etcd-client
+        update_cache: yes
+        state: present 
+    - name: Ensure /etc/default directory exists
+      ansible.builtin.file:
+        path: /etc/default
+        state: directory
+        mode: '0755'
+    - name: Copy Etcd configuration template to /etc/default/etcd
+      ansible.builtin.template:
+        src: etcd.j2 
+        dest: /etc/default/etcd
+        owner: fvtarasov
+        group: fvtarasov
+        mode: '0644' 
+    - name: Restart Etcd service
+      ansible.builtin.systemd_service:
+        name: etcd.service
+        state: restarted
