@@ -1,0 +1,24 @@
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Install haproxy
+      become: true
+      ansible.builtin.apt:
+        name: haproxy
+        update_cache: yes
+        state: present
+    - name: Copy HAproxy configuration template to /etc/haproxy/haproxy.cfg
+      ansible.builtin.template:
+        src: templates/conf_HAproxy.j2
+        dest: /etc/haproxy/haproxy.cfg
+    - name: Copy HAproxy configuration template to /etc/keepalived/keepalived.conf
+      ansible.builtin.template:
+        src: templates/conf_Keepalived.j2
+        dest: /etc/keepalived/keepalived.conf
+    - name: Systemd enabled and starting haproxy.service
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+        name: haproxy.service
+        enabled: true
