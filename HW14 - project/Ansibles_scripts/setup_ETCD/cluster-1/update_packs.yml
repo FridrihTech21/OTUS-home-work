@@ -1,0 +1,8 @@
+---
+- name:
+  hosts: servers
+  become: yes
+  tasks:
+    - name: Updating lists packages
+      ansible.builtin.apt:
+        update_cache: yes
