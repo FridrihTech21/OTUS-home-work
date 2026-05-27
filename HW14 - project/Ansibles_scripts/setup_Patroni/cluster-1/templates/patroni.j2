@@ -1,0 +1,78 @@
+scope: patroni_cluster_1
+namespace: /patroni_1
+name: {{ patroni_node }}_cluster_1
+log:
+  level: INFO
+  dir: /data/log/patroni
+  file_size: 50000000
+  file_num: 10
+restapi:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:8008
+
+etcd:
+  hosts: {{ patroni_initial_cluster_string }}
+
+bootstrap:
+  dcs:
+    failsafe_mode: true
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    synchronous_mode_count: 1
+    master_start_timeout: 30
+    slots:
+      prod_replica1:
+        type: physical
+
+  initdb:
+    - encoding: UTF8
+
+  pg_hba:
+    - host replication replicator 127.0.0.1/8 md5
+
+    {% for ip in patroni_replicator_ips %}
+
+    - host replication replicator {{ ip }}/24 md5
+
+    {% endfor %}
+
+    - host all all 0.0.0.0/0 md5
+
+  users:
+    admin:
+      password: 'password'
+      options:
+        - CREATEDB
+        - CREATEROLE
+
+postgresql:
+  listen: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  connect_address: {{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}:5432
+  data_dir: /data/16
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    replication:
+      username: replicator
+      password: 'password'
+    superuser:
+      username: postgres
+      password: 'password'
+    rewind:
+      username: rewind_user
+      password: 'password'
+  parameters:
+    unix_socket_directories: '.'
+  create_replica_methods: ["basebackup"]
+  basebackup:
+    max-rate: 100M
+    checkpoint: fast
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
