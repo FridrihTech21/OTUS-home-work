@@ -1,0 +1,111 @@
+---
+- name:
+  hosts: server_S3
+  become: yes
+  tasks:
+    - name: Set timezone to
+      become: true
+      community.general.timezone:
+        name: Europe/Moscow
+    - name: Install chrony
+      become: true
+      ansible.builtin.apt:
+        name: chrony
+        update_cache: yes
+        state: present
+    - name: IPTABLES. Insert rule in the beginning of INPUT chain for PORT=9000
+      become: true
+      ansible.builtin.command:
+        cmd: iptables -I INPUT -p tcp --dport 9000 -j ACCEPT
+    - name: IPTABLES. Insert rule in the beginning of INPUT chain for PORT=9001
+      become: true
+      ansible.builtin.command:
+        cmd: iptables -I INPUT -p tcp --dport 9001 -j ACCEPT
+    - name: IPTABLES. Install persistent
+      become: true
+      ansible.builtin.apt:
+        name: iptables-persistent
+        update_cache: yes
+        state: present
+    - name: IPTABLES. Save netfilter
+      become: true
+      ansible.builtin.command:
+        cmd: netfilter-persistent save
+    - name: Updating lists packages
+      ansible.builtin.apt:
+        update_cache: yes   
+    - name: Download MINIO
+      ansible.builtin.get_url:
+        url: https://dl.min.io/server/minio/release/linux-amd64/archive/minio.RELEASE.2025-04-22T22-12-26Z
+        dest: /tmp/minio
+        mode: '0775'
+    - name: Move minio-file to /usr/local/bin/minio
+      become: true
+      ansible.builtin.command:
+        cmd: mv /tmp/minio /usr/local/bin/minio
+    - name: Add user minio without home_dir
+      become: true
+      ansible.builtin.user:
+        name: minio
+        shell: /bin/bash
+    - name: Create /var/lib/minio/data
+      become: true
+      ansible.builtin.file:
+        path: /var/lib/minio/data
+        state: directory
+        owner: minio
+        group: minio
+        mode: '0775'
+    - name: Download mc
+      ansible.builtin.get_url:
+        url: https://dl.min.io/client/mc/release/linux-amd64/mc
+        dest: /tmp/mc
+        mode: '0775'
+    - name: Move mc-file to /usr/local/bin/
+      become: true
+      ansible.builtin.command:
+        cmd: mv /tmp/mc /usr/local/bin/
+    - name: Change owner and group for /usr/local/bin/mc
+      become: true
+      ansible.builtin.file:
+        path: /usr/local/bin/mc
+        owner: minio
+        group: minio
+    - name: Download minio.service
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/minio/minio-service/master/linux-systemd/minio.service
+        dest: /tmp/minio.service
+        mode: '0775'
+    - name: Move minio.service to  /etc/systemd/system/
+      become: true
+      ansible.builtin.command:
+        cmd: mv /tmp/minio.service  /etc/systemd/system/
+    - name: Type=notify change to Type=simple in /etc/systemd/system/minio.service
+      become: true
+      ansible.builtin.replace:
+        path: /etc/systemd/system/minio.service
+        regexp: 'Type=notify'
+        replace: 'Type=simple' 
+    - name: User=minio-user change to User=minio in /etc/systemd/system/minio.service
+      become: true
+      ansible.builtin.replace:
+        path: /etc/systemd/system/minio.service
+        regexp: 'User=minio-user'
+        replace: 'User=minio' 
+    - name: Group=minio-user change to Group=minio in /etc/systemd/system/minio.service
+      become: true
+      ansible.builtin.replace:
+        path: /etc/systemd/system/minio.service
+        regexp: 'Group=minio-user'
+        replace: 'Group=minio' 
+    - name: Copy EnvironmentFile for minio.service
+      become: true
+      ansible.builtin.template:
+        src: EnvironmentFile.j2
+        dest: /etc/default/minio
+    - name: Enabled, Reload and Start sys.d 
+      ansible.builtin.systemd_service:
+        name: minio.service
+        daemon_reload: true
+        state: started
+        enabled: true
